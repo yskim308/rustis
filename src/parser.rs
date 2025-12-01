@@ -1,3 +1,11 @@
+pub enum ReponseValue {
+    SimpleString(String),
+    Error(String),
+    Integer(i64),
+    BulkString(Option<Vec<u8>>),
+    Array(Option<Vec<ReponseValue>>),
+}
+
 pub struct Parser {
     buffer: Vec<u8>,
     cursor: usize,
@@ -16,6 +24,7 @@ impl Parser {
             b'-' => self.parse_simple_error(),
             b':' => self.parse_integer(),
             b'$' => self.parse_bulk_string(),
+            b'*' => self.parse_array(),
             _ => panic!("failed parsing"),
         }
     }
@@ -27,4 +36,6 @@ impl Parser {
     fn parse_integer(&mut self) {}
 
     fn parse_bulk_string(&mut self) {}
+
+    fn parse_array(&mut self) {}
 }
