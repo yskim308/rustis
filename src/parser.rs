@@ -1,4 +1,4 @@
-use std::{num::ParseIntError, string::FromUtf8Error};
+use std::{num::ParseIntError, process::Output, string::FromUtf8Error};
 
 pub enum ReponseValue {
     SimpleString(String),
@@ -107,7 +107,26 @@ impl Parser {
         Ok(ReponseValue::Integer(value))
     }
 
-    fn parse_bulk_string(&mut self) {}
+    fn parse_bulk_string(&mut self) -> Result<ReponseValue, BufParseError> {
+        let first_byte = self.peek();
+
+        if first_byte != b'$' {
+            return Err(BufParseError::FirstByteError(first_byte));
+        }
+
+        let length = self.read_line()?.parse::<usize>()?;
+
+        let bytes = &self.buffer[self.cursor..length];
+
+        self.cursor += 1;
+        if self.cursor == self.buffer.len() || self.peek() != b'\n' {
+            return Err(BufParseError::EofError("expected \\n after \\r"));
+        }
+
+        self.cursor += 1;
+
+        Ok(ReponseValue::BulkString(Some(bytes.to_vec())))
+    }
 
     fn parse_array(&mut self) {}
 }
