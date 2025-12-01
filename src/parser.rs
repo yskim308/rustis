@@ -57,7 +57,7 @@ impl Parser {
     fn parse(&mut self) -> Result<ReponseValue, BufParseError> {
         match self.peek() {
             b'+' => self.parse_simple_string(),
-            // b'-' => self.parse_simple_error(),
+            b'-' => self.parse_simple_error(),
             // b':' => self.parse_integer(),
             // b'$' => self.parse_bulk_string(),
             // b'*' => self.parse_array(),
@@ -77,7 +77,17 @@ impl Parser {
         Ok(ReponseValue::SimpleString(line))
     }
 
-    fn parse_simple_error(&mut self) {}
+    fn parse_simple_error(&mut self) -> Result<ReponseValue, BufParseError> {
+        let first_byte = self.peek();
+
+        if first_byte != b'-' {
+            return Err(BufParseError::FirstByteError(first_byte));
+        }
+
+        let line = self.read_line()?;
+
+        Ok(ReponseValue::Error(line))
+    }
 
     fn parse_integer(&mut self) {}
 
