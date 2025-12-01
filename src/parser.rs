@@ -8,9 +8,11 @@ pub enum ReponseValue {
     Array(Option<Vec<ReponseValue>>),
 }
 
-enum BufParseError {
+pub enum BufParseError {
     EofError(&'static str),
     ByteConversionError(FromUtf8Error),
+    FirstByteError(u8),
+    InvalidFirstByte(),
 }
 
 impl From<FromUtf8Error> for BufParseError {
@@ -52,23 +54,27 @@ impl Parser {
     }
 
     // todo: robust handling of TCP fragmentation (if we dont find /r/n)
-    // todo: break out of generic error handling, use specific parser errors
-    fn parse(&mut self) -> Result<ReponseValue, String> {
+    fn parse(&mut self) -> Result<ReponseValue, BufParseError> {
         match self.peek() {
             b'+' => self.parse_simple_string(),
             // b'-' => self.parse_simple_error(),
             // b':' => self.parse_integer(),
             // b'$' => self.parse_bulk_string(),
             // b'*' => self.parse_array(),
-            _ => Err("failed parsing".into()),
+            _ => Err(BufParseError::InvalidFirstByte()),
         }
     }
 
-    fn parse_simple_string(&mut self) -> Result<ReponseValue, Buf> {
-        if self.peek() != b'+' {
-            return Err("Expected '+' in first byte".into());
+    fn parse_simple_string(&mut self) -> Result<ReponseValue, BufParseError> {
+        let first_byte = self.peek();
+
+        if first_byte != b'+' {
+            return Err(BufParseError::FirstByteError(first_byte));
         }
-        self.cursor += 1;
+
+        let line = self.read_line()?;
+
+        Ok(ReponseValue::SimpleString(line))
     }
 
     fn parse_simple_error(&mut self) {}
