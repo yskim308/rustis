@@ -1,4 +1,4 @@
-use std::{num::ParseIntError, process::Output, string::FromUtf8Error};
+use std::{num::ParseIntError, string::FromUtf8Error};
 
 pub enum ReponseValue {
     SimpleString(String),
@@ -65,9 +65,9 @@ impl Parser {
         match self.peek() {
             b'+' => self.parse_simple_string(),
             b'-' => self.parse_simple_error(),
-            // b':' => self.parse_integer(),
-            // b'$' => self.parse_bulk_string(),
-            // b'*' => self.parse_array(),
+            b':' => self.parse_integer(),
+            b'$' => self.parse_bulk_string(),
+            b'*' => self.parse_array(),
             _ => Err(BufParseError::InvalidFirstByte()),
         }
     }
@@ -128,5 +128,26 @@ impl Parser {
         Ok(ReponseValue::BulkString(Some(bytes.to_vec())))
     }
 
-    fn parse_array(&mut self) {}
+    fn parse_array(&mut self) -> Result<ReponseValue, BufParseError> {
+        let first_byte = self.peek();
+
+        if first_byte != b'*' {
+            return Err(BufParseError::FirstByteError(first_byte));
+        }
+
+        let length = self.read_line()?.parse::<i64>()?;
+
+        if length <= 0 {
+            return Ok(ReponseValue::Array(None));
+        }
+
+        let mut items = Vec::new();
+
+        for _ in 0..length {
+            let value = self.parse()?;
+            items.push(value);
+        }
+
+        Ok(ReponseValue::Array(Some(items)))
+    }
 }
