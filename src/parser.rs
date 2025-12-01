@@ -1,4 +1,4 @@
-use std::string::FromUtf8Error;
+use std::{num::ParseIntError, string::FromUtf8Error};
 
 pub enum ReponseValue {
     SimpleString(String),
@@ -13,11 +13,18 @@ pub enum BufParseError {
     ByteConversionError(FromUtf8Error),
     FirstByteError(u8),
     InvalidFirstByte(),
+    StringConversionError(ParseIntError),
 }
 
 impl From<FromUtf8Error> for BufParseError {
     fn from(value: FromUtf8Error) -> Self {
         BufParseError::ByteConversionError(value)
+    }
+}
+
+impl From<ParseIntError> for BufParseError {
+    fn from(value: ParseIntError) -> Self {
+        BufParseError::StringConversionError(value)
     }
 }
 
@@ -89,7 +96,16 @@ impl Parser {
         Ok(ReponseValue::Error(line))
     }
 
-    fn parse_integer(&mut self) {}
+    fn parse_integer(&mut self) -> Result<ReponseValue, BufParseError> {
+        let first_byte = self.peek();
+
+        if first_byte != b':' {
+            return Err(BufParseError::FirstByteError(first_byte));
+        }
+
+        let value = self.read_line()?.parse::<i64>()?;
+        Ok(ReponseValue::Integer(value))
+    }
 
     fn parse_bulk_string(&mut self) {}
 
