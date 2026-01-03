@@ -9,11 +9,11 @@ pub enum ReponseValue {
 }
 
 pub enum BufParseError {
-    EofError(&'static str),
-    ByteConversionError(FromUtf8Error),
-    FirstByteError(u8),
-    InvalidFirstByte(),
+    UnexpectedEOF { expected: &'static str },
+    InvalidFirstByte(Option<u8>),
+    UnexpectedByte { expected: u8, found: Option<u8> },
     StringConversionError(ParseIntError),
+    ByteConversionError(FromUtf8Error),
 }
 
 impl From<FromUtf8Error> for BufParseError {
@@ -34,25 +34,35 @@ pub struct Parser {
 }
 
 impl Parser {
-    fn peek(&self) -> u8 {
-        self.buffer[self.cursor]
+    fn peek(&self) -> Option<u8> {
+        if self.cursor >= self.buffer.len() {
+            None
+        } else {
+            Some(self.buffer[self.cursor])
+        }
     }
 
     fn read_line(&mut self) -> Result<String, BufParseError> {
-        while self.cursor < self.buffer.len() && self.peek() != b'\r' {
+        let start = self.cursor;
+        while self.cursor < self.buffer.len() && self.buffer[self.cursor] != b'\r' {
             self.cursor += 1;
         }
 
-        if self.cursor == self.buffer.len() {
-            return Err(BufParseError::EofError("Expected \\r at EOF"));
+        if self.cursor >= self.buffer.len() {
+            return Err(BufParseError::UnexpectedEOF { expected: "CR \\r" });
         }
 
-        let bytes = &self.buffer[..self.cursor];
+        let bytes = &self.buffer[start..self.cursor];
         let output = String::from_utf8(bytes.to_vec())?;
 
         self.cursor += 1;
-        if self.cursor == self.buffer.len() || self.peek() != b'\n' {
-            return Err(BufParseError::EofError("expected \\n after \\r"));
+        if self.cursor >= self.buffer.len() {
+            return Err(BufParseError::UnexpectedEOF { expected: "LR \\n" });
+        } else if self.buffer[self.cursor] != b'\n' {
+            return Err(BufParseError::UnexpectedByte {
+                expected: b'\n',
+                found: self.peek(),
+            });
         }
 
         self.cursor += 1;
@@ -60,23 +70,26 @@ impl Parser {
         Ok(output)
     }
 
-    // todo: robust handling of TCP fragmentation (if we dont find /r/n)
     fn parse(&mut self) -> Result<ReponseValue, BufParseError> {
         match self.peek() {
-            b'+' => self.parse_simple_string(),
-            b'-' => self.parse_simple_error(),
-            b':' => self.parse_integer(),
-            b'$' => self.parse_bulk_string(),
-            b'*' => self.parse_array(),
-            _ => Err(BufParseError::InvalidFirstByte()),
+            Some(b'+') => self.parse_simple_string(),
+            Some(b'-') => self.parse_simple_error(),
+            Some(b':') => self.parse_integer(),
+            Some(b'$') => self.parse_bulk_string(),
+            Some(b'*') => self.parse_array(),
+            Some(byte) => Err(BufParseError::InvalidFirstByte(Some(byte))),
+            None => Err(BufParseError::InvalidFirstByte(None)),
         }
     }
 
     fn parse_simple_string(&mut self) -> Result<ReponseValue, BufParseError> {
-        let first_byte = self.peek();
+        let first_byte = self.peek().ok_or(BufParseError::InvalidFirstByte(None))?;
 
         if first_byte != b'+' {
-            return Err(BufParseError::FirstByteError(first_byte));
+            return Err(BufParseError::UnexpectedByte {
+                expected: b'+',
+                found: Some(first_byte),
+            });
         }
 
         let line = self.read_line()?;
@@ -85,10 +98,13 @@ impl Parser {
     }
 
     fn parse_simple_error(&mut self) -> Result<ReponseValue, BufParseError> {
-        let first_byte = self.peek();
+        let first_byte = self.peek().ok_or(BufParseError::InvalidFirstByte(None))?;
 
         if first_byte != b'-' {
-            return Err(BufParseError::FirstByteError(first_byte));
+            return Err(BufParseError::UnexpectedByte {
+                expected: b'-',
+                found: Some(first_byte),
+            });
         }
 
         let line = self.read_line()?;
@@ -97,10 +113,13 @@ impl Parser {
     }
 
     fn parse_integer(&mut self) -> Result<ReponseValue, BufParseError> {
-        let first_byte = self.peek();
+        let first_byte = self.peek().ok_or(BufParseError::InvalidFirstByte(None))?;
 
         if first_byte != b':' {
-            return Err(BufParseError::FirstByteError(first_byte));
+            return Err(BufParseError::UnexpectedByte {
+                expected: b':',
+                found: Some(first_byte),
+            });
         }
 
         let value = self.read_line()?.parse::<i64>()?;
@@ -108,19 +127,32 @@ impl Parser {
     }
 
     fn parse_bulk_string(&mut self) -> Result<ReponseValue, BufParseError> {
-        let first_byte = self.peek();
+        let first_byte = self.peek().ok_or(BufParseError::InvalidFirstByte(None))?;
 
         if first_byte != b'$' {
-            return Err(BufParseError::FirstByteError(first_byte));
+            return Err(BufParseError::UnexpectedByte {
+                expected: b'$',
+                found: Some(first_byte),
+            });
         }
 
-        let length = self.read_line()?.parse::<usize>()?;
-
-        let bytes = &self.buffer[self.cursor..length];
-
         self.cursor += 1;
-        if self.cursor == self.buffer.len() || self.peek() != b'\n' {
-            return Err(BufParseError::EofError("expected \\n after \\r"));
+        let length = self.read_line()?.parse::<i64>()?;
+        if length < 0 {
+            return Ok(ReponseValue::BulkString(None));
+        }
+
+        let length = length as usize;
+        let bytes = &self.buffer[self.cursor..self.cursor + length];
+
+        self.cursor += length;
+        if self.cursor >= self.buffer.len() {
+            return Err(BufParseError::UnexpectedEOF { expected: "LR \\n" });
+        } else if self.buffer[self.cursor] != b'\n' {
+            return Err(BufParseError::UnexpectedByte {
+                expected: b'\n',
+                found: self.peek(),
+            });
         }
 
         self.cursor += 1;
@@ -129,11 +161,15 @@ impl Parser {
     }
 
     fn parse_array(&mut self) -> Result<ReponseValue, BufParseError> {
-        let first_byte = self.peek();
+        let first_byte = self.peek().ok_or(BufParseError::InvalidFirstByte(None))?;
 
         if first_byte != b'*' {
-            return Err(BufParseError::FirstByteError(first_byte));
+            return Err(BufParseError::UnexpectedByte {
+                expected: b'*',
+                found: Some(first_byte),
+            });
         }
+        self.cursor += 1;
 
         let length = self.read_line()?.parse::<i64>()?;
 
