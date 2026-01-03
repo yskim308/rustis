@@ -34,6 +34,10 @@ pub struct Parser {
 }
 
 impl Parser {
+    pub fn new(buffer: Vec<u8>) -> Self {
+        Self { buffer, cursor: 0 }
+    }
+
     fn peek(&self) -> Option<u8> {
         if self.cursor >= self.buffer.len() {
             None
@@ -70,7 +74,7 @@ impl Parser {
         Ok(output)
     }
 
-    fn parse(&mut self) -> Result<ReponseValue, BufParseError> {
+    pub fn parse(&mut self) -> Result<ReponseValue, BufParseError> {
         match self.peek() {
             Some(b'+') => self.parse_simple_string(),
             Some(b'-') => self.parse_simple_error(),
