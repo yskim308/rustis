@@ -192,7 +192,7 @@ impl Parser {
 
         let length = self.read_line()?.parse::<i64>()?;
 
-        if length <= 0 {
+        if length < 0 {
             return Ok(ReponseValue::Array(None));
         }
 
