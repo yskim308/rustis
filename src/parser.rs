@@ -37,7 +37,7 @@ pub struct Parser {
 }
 
 fn expect_byte(found: u8, expected: u8) -> Result<(), BufParseError> {
-    if (found != expected) {
+    if found != expected {
         return Err(BufParseError::UnexpectedByte {
             expected,
             found: Some(found),
