@@ -8,6 +8,7 @@ pub enum ReponseValue {
     Array(Option<Vec<ReponseValue>>),
 }
 
+#[derive(Debug, PartialEq)]
 pub enum BufParseError {
     UnexpectedEOF { expected: &'static str },
     InvalidFirstByte(Option<u8>),
@@ -96,6 +97,8 @@ impl Parser {
             });
         }
 
+        self.cursor += 1;
+
         let line = self.read_line()?;
 
         Ok(ReponseValue::SimpleString(line))
@@ -111,6 +114,8 @@ impl Parser {
             });
         }
 
+        self.cursor += 1;
+
         let line = self.read_line()?;
 
         Ok(ReponseValue::Error(line))
@@ -125,6 +130,8 @@ impl Parser {
                 found: Some(first_byte),
             });
         }
+
+        self.cursor += 1;
 
         let value = self.read_line()?.parse::<i64>()?;
         Ok(ReponseValue::Integer(value))
@@ -151,8 +158,16 @@ impl Parser {
 
         self.cursor += length;
         if self.cursor >= self.buffer.len() {
-            return Err(BufParseError::UnexpectedEOF { expected: "LR \\n" });
-        } else if self.buffer[self.cursor] != b'\n' {
+            return Err(BufParseError::UnexpectedEOF { expected: "CR \\r" });
+        } else if self.buffer[self.cursor] != b'\r' {
+            return Err(BufParseError::UnexpectedByte {
+                expected: b'\r',
+                found: self.peek(),
+            });
+        }
+
+        self.cursor += 1;
+        if self.buffer[self.cursor] != b'\n' {
             return Err(BufParseError::UnexpectedByte {
                 expected: b'\n',
                 found: self.peek(),
