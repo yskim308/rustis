@@ -27,7 +27,7 @@ fn test_simple_string_eof_error() {
     let input = b"+OK\r";
     let result = parse_buffer(input);
 
-    assert!(matches!(result, Err(BufParseError::UnexpectedEOF { .. })));
+    assert!(matches!(result, Err(BufParseError::Incomplete)));
 }
 
 #[test]
@@ -62,7 +62,7 @@ fn test_error_missing_crlf() {
     let input = b"-ERR";
     let result = parse_buffer(input);
 
-    assert!(matches!(result, Err(BufParseError::UnexpectedEOF { .. })));
+    assert!(matches!(result, Err(BufParseError::Incomplete)));
 }
 
 // =========================================================================
