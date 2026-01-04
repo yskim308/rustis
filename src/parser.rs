@@ -154,6 +154,9 @@ impl Parser {
         }
 
         let length = length as usize;
+        if self.cursor + length > self.buffer.len() {
+            return Err(BufParseError::UnexpectedEOF { expected: "CR \\r" });
+        }
         let bytes = &self.buffer[self.cursor..self.cursor + length];
 
         self.cursor += length;
