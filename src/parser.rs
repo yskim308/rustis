@@ -31,8 +31,8 @@ impl From<ParseIntError> for BufParseError {
     }
 }
 
-pub struct Parser {
-    buffer: Vec<u8>,
+pub struct Parser<'a> {
+    buffer: &'a Vec<u8>,
     cursor: usize,
 }
 
@@ -47,8 +47,8 @@ fn expect_byte(found: u8, expected: u8) -> Result<(), BufParseError> {
     Ok(())
 }
 
-impl Parser {
-    pub fn new(buffer: Vec<u8>) -> Self {
+impl<'a> Parser<'a> {
+    pub fn new(buffer: &'a Vec<u8>) -> Self {
         Self { buffer, cursor: 0 }
     }
 
