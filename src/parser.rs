@@ -1,5 +1,6 @@
 use std::{num::ParseIntError, string::FromUtf8Error};
 
+#[derive(Debug)]
 pub enum ReponseValue {
     SimpleString(String),
     Error(String),
