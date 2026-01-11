@@ -9,6 +9,33 @@ pub enum ReponseValue {
     Array(Option<Vec<ReponseValue>>),
 }
 
+impl ReponseValue {
+    pub fn serialize(&self) -> Vec<u8> {
+        match self {
+            ReponseValue::SimpleString(s) => format!("+{}\r\n", s).into_bytes(),
+            ReponseValue::Error(msg) => format!("-{}\r\n", msg).into_bytes(),
+            ReponseValue::Integer(i) => format!(":{}\r\n", i).into_bytes(),
+            ReponseValue::BulkString(None) => b"$-1\r\n".to_vec(),
+            ReponseValue::BulkString(Some(data)) => {
+                let mut bytes = Vec::new();
+                bytes.extend_from_slice(format!("${}\r\n", data.len()).as_bytes());
+                bytes.extend_from_slice(data);
+                bytes.extend_from_slice(b"\r\n");
+                bytes
+            }
+            ReponseValue::Array(Some(items)) => {
+                let mut bytes = Vec::new();
+                bytes.extend_from_slice(format!("*{}\r\n", items.len()).as_bytes());
+                for item in items {
+                    bytes.extend(item.serialize());
+                }
+                bytes
+            }
+            ReponseValue::Array(None) => b"*-1\r\n".to_vec(),
+        }
+    }
+}
+
 #[derive(Debug, PartialEq)]
 pub enum BufParseError {
     Incomplete,
