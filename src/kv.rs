@@ -2,14 +2,18 @@ use bytes::Bytes;
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 
-/// The central Key-Value store.
 /// We use Arc to share it across connection tasks and RwLock to allow
 /// concurrent reads but exclusive writes.
 #[derive(Clone, Debug)]
 pub struct KvStore {
     // We use Bytes because it's cheap to clone (reference counted)
-    // which is perfect for a network server.
     db: Arc<RwLock<HashMap<String, Bytes>>>,
+}
+
+impl Default for KvStore {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl KvStore {
