@@ -1,3 +1,7 @@
+use std::sync::Arc;
+
+use rustis::handler::CommandHandler;
+use rustis::kv::KvStore;
 use rustis::parser::{BufParseError, Parser};
 
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -37,12 +41,15 @@ async fn handle_connection(mut stream: TcpStream) -> tokio::io::Result<()> {
         // Note: Creating a new parser per loop is fine for now, but we'd want a state-ful parser
         // later
         let mut parser = Parser::new(&accumulated);
+        let kv = Arc::new(KvStore::new());
+        let handler = CommandHandler::new(kv);
 
         match parser.parse() {
             Ok(value) => {
                 println!("Parsed: {:?}", value);
+                let response = handler.process_command(value);
                 // Echo back the data
-                stream.write_all(&accumulated).await?;
+                stream.write_all(&response.serialize()).await?;
                 accumulated.clear();
             }
             Err(BufParseError::Incomplete) => {
