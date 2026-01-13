@@ -5,6 +5,7 @@ use std::sync::{Arc, RwLock};
 #[derive(Debug)]
 pub enum DatabaseError {
     PoisonedLock,
+    WrongType,
 }
 
 #[derive(Clone, Debug)]
@@ -26,6 +27,22 @@ impl Default for KvStore {
     fn default() -> Self {
         Self::new()
     }
+}
+
+fn resolve_range(start: i64, stop: i64, len: usize) -> (usize, usize) {
+    let len = len as i64;
+
+    let mut start = if start < 0 { len + start } else { start };
+    let mut stop = if stop < 0 { len + stop } else { stop };
+
+    start = start.clamp(0, len);
+    stop = stop.clamp(0, len - 1);
+
+    if start > stop || len == 0 {
+        return (0, 0); // Empty range
+    }
+
+    (start as usize, stop as usize)
 }
 
 impl KvStore {
@@ -53,6 +70,69 @@ impl KvStore {
     pub fn del(&self, key: &str) -> Result<bool, DatabaseError> {
         let mut db = self.db.write().map_err(|_| DatabaseError::PoisonedLock)?;
         Ok(db.remove(key).is_some())
+    }
+
+    pub fn lpush(&self, key: String, values: Vec<Bytes>) -> Result<usize, DatabaseError> {
+        let mut db = self.db.write().map_err(|_| DatabaseError::PoisonedLock)?;
+        let entry = db
+            .entry(key)
+            .or_insert_with(|| RedisValue::List(VecDeque::new()));
+        match entry {
+            RedisValue::List(list) => {
+                for val in values {
+                    list.push_front(val);
+                }
+                Ok(list.len())
+            }
+            _ => Err(DatabaseError::WrongType),
+        }
+    }
+
+    pub fn rpush(&self, key: String, values: Vec<Bytes>) -> Result<usize, DatabaseError> {
+        let mut db = self.db.write().map_err(|_| DatabaseError::PoisonedLock)?;
+        let entry = db
+            .entry(key)
+            .or_insert_with(|| RedisValue::List(VecDeque::new()));
+        match entry {
+            RedisValue::List(list) => {
+                for val in values {
+                    list.push_back(val);
+                }
+                Ok(list.len())
+            }
+            _ => Err(DatabaseError::WrongType),
+        }
+    }
+
+    pub fn lrange(&self, key: &str, start: i64, stop: i64) -> Result<Vec<Bytes>, DatabaseError> {
+        let db = self.db.read().map_err(|_| DatabaseError::PoisonedLock)?;
+
+        let val = match db.get(key) {
+            Some(RedisValue::List(list)) => list,
+            Some(_) => return Err(DatabaseError::WrongType),
+            None => return Ok(vec![]),
+        };
+
+        let len = val.len();
+        if len == 0 {
+            return Ok(vec![]);
+        }
+
+        let (start_idx, stop_idx) = resolve_range(start, stop, len);
+
+        if start_idx > stop_idx && len > 0 && !(start_idx == 0 && stop_idx == 0) {
+            return Ok(vec![]);
+        }
+
+        let count = (stop_idx - start_idx) + 1;
+        let result = val
+            .iter()
+            .skip(start_idx)
+            .take(count)
+            .cloned() // Increments ref-count on Bytes, very fast
+            .collect();
+
+        Ok(result)
     }
 }
 
