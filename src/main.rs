@@ -1,3 +1,4 @@
+use std::env;
 use std::sync::Arc;
 
 use rustis::handler::CommandHandler;
@@ -7,9 +8,13 @@ use rustis::parser::{BufParseError, Parser};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
 
-#[tokio::main]
+#[tokio::main(flavor = "current_thread")]
 async fn main() -> tokio::io::Result<()> {
-    let port = 4000;
+    let args: Vec<String> = env::args().collect();
+    let port = args
+        .get(1)
+        .and_then(|s| s.parse::<u16>().ok())
+        .unwrap_or(6379);
     let addr = format!("127.0.0.1:{}", port);
     let listener = TcpListener::bind(&addr).await?;
     println!("Listening on port {port}");
