@@ -38,8 +38,10 @@ impl CommandHandler {
             "GET" => {
                 let key_part = it.next();
                 match key_part {
-                    Some(ReponseValue::BulkString(Some(bytes))) => return self.handle_get(&String::from_utf8_lossy(&bytes))
-                    _ => return ReponseValue::Error("error while processing key".to_string()),
+                    Some(ReponseValue::BulkString(Some(bytes))) => {
+                        self.handle_get(&String::from_utf8_lossy(&bytes))
+                    }
+                    _ => ReponseValue::Error("error while processing key".to_string()),
                 }
             }
             "SET" => {
@@ -53,9 +55,11 @@ impl CommandHandler {
 
                 let value_part = it.next();
                 match value_part {
-                    Some(ReponseValue::BulkString(Some(bytes))) => return self.handle_set(key, Bytes::from(bytes)),
-                    _ => return ReponseValue::Error("error while processing key".to_string()),
-                };
+                    Some(ReponseValue::BulkString(Some(bytes))) => {
+                        self.handle_set(key, Bytes::from(bytes))
+                    }
+                    _ => ReponseValue::Error("error while processing key".to_string()),
+                }
             }
             _ => ReponseValue::Error("invalid command".to_string()),
         }
