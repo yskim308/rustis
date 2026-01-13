@@ -19,18 +19,20 @@ async fn main() -> tokio::io::Result<()> {
     let listener = TcpListener::bind(&addr).await?;
     println!("Listening on port {port}");
 
+    let kv = Arc::new(KvStore::new());
     loop {
         let (stream, _) = listener.accept().await?;
 
+        let kv_clone = kv.clone();
         tokio::spawn(async move {
-            if let Err(e) = handle_connection(stream).await {
+            if let Err(e) = handle_connection(stream, kv_clone).await {
                 eprintln!("Error handling connection: {:?}", e);
             }
         });
     }
 }
 
-async fn handle_connection(mut stream: TcpStream) -> tokio::io::Result<()> {
+async fn handle_connection(mut stream: TcpStream, kv: Arc<KvStore>) -> tokio::io::Result<()> {
     let mut buffer = [0; 512];
     let mut accumulated: Vec<u8> = Vec::new();
 
@@ -46,8 +48,7 @@ async fn handle_connection(mut stream: TcpStream) -> tokio::io::Result<()> {
         // Note: Creating a new parser per loop is fine for now, but we'd want a state-ful parser
         // later
         let mut parser = Parser::new(&accumulated);
-        let kv = Arc::new(KvStore::new());
-        let handler = CommandHandler::new(kv);
+        let handler = CommandHandler::new(kv.clone());
 
         match parser.parse() {
             Ok(value) => {
