@@ -68,7 +68,7 @@ impl CommandHandler {
     fn handle_get(&self, key: &str) -> ReponseValue {
         match self.kv.get(key) {
             Ok(Some(bytes)) => ReponseValue::BulkString(Some(bytes.to_vec())),
-            Ok(None) => ReponseValue::BulkString(Some(Vec::new())),
+            Ok(None) => ReponseValue::BulkString(None),
             Err(_) => ReponseValue::Error("internal server error (poisoned lock)".to_string()),
         }
     }
