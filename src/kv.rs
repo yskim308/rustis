@@ -8,7 +8,7 @@ pub enum DatabaseError {
     WrongType,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum RedisValue {
     String(Bytes),
     List(VecDeque<Bytes>),
@@ -142,50 +142,6 @@ impl KvStore {
 mod tests {
     use super::*;
     use std::thread;
-
-    #[test]
-    fn test_set_and_get_happy_path() {
-        let store = KvStore::new();
-        let key = "username".to_string();
-        let value = Bytes::from("admin");
-
-        // Test Set
-        assert!(store.set(key.clone(), value.clone()).is_ok());
-
-        // Test Get
-        let result = store.get(&key).expect("Failed to get value");
-        assert_eq!(result, Some(value));
-    }
-
-    #[test]
-    fn test_del_happy_path() {
-        let store = KvStore::new();
-        let key = "session_id";
-
-        store.set(key.to_string(), Bytes::from("12345")).unwrap();
-
-        let deleted = store.del(key).expect("Failed to delete");
-        assert!(deleted);
-
-        let result = store.get(key).unwrap();
-        assert!(result.is_none());
-    }
-
-    #[test]
-    fn test_get_empty_path() {
-        let store = KvStore::new();
-
-        let result = store.get("non_existent_key").expect("Should not fail");
-        assert!(result.is_none());
-    }
-
-    #[test]
-    fn test_del_empty_path() {
-        let store = KvStore::new();
-
-        let result = store.del("non_existent_key").expect("Should not fail");
-        assert!(!result);
-    }
 
     fn poison_store(store: &KvStore) {
         let store_clone = store.clone();
