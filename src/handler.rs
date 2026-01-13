@@ -1,6 +1,6 @@
 use bytes::Bytes;
 
-use crate::kv::KvStore;
+use crate::kv::{KvStore, RedisValue};
 use crate::parser::ReponseValue;
 use std::sync::Arc;
 
@@ -67,9 +67,10 @@ impl CommandHandler {
 
     fn handle_get(&self, key: &str) -> ReponseValue {
         match self.kv.get(key) {
-            Ok(Some(bytes)) => ReponseValue::BulkString(Some(bytes.to_vec())),
+            Ok(Some(RedisValue::String(b))) => ReponseValue::BulkString(Some(b.to_vec())),
+            Ok(Some(_)) => ReponseValue::Error("WRONGTYPE ...".to_string()),
             Ok(None) => ReponseValue::BulkString(None),
-            Err(_) => ReponseValue::Error("internal server error (poisoned lock)".to_string()),
+            Err(_) => ReponseValue::Error("internal server error".to_string()),
         }
     }
 
