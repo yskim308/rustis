@@ -1,5 +1,6 @@
 use bytes::Bytes;
 use std::sync::Arc;
+use tokio::task::coop::RestoreOnPending;
 
 use crate::kv::{KvStore, RedisValue};
 use crate::parser::ReponseValue;
@@ -34,6 +35,8 @@ impl CommandHandler {
             "PING" => ReponseValue::SimpleString("PONG".to_string()),
             "GET" => self.handle_get(args),
             "SET" => self.handle_set(args),
+            "LPUSH" => self.handle_lpush(args),
+            "RPUSH" => self.handle_rpush(args),
             _ => ReponseValue::Error("invalid command".to_string()),
         }
     }
@@ -80,6 +83,50 @@ impl CommandHandler {
         match self.kv.set(key, value) {
             Ok(()) => ReponseValue::SimpleString("OK".to_string()),
             Err(_) => ReponseValue::Error("internal server error (poisoned lock)".to_string()),
+        }
+    }
+
+    fn handle_lpush(&self, args: &[ReponseValue]) -> ReponseValue {
+        let key = match &args[0] {
+            ReponseValue::BulkString(Some(bytes)) => String::from_utf8_lossy(bytes),
+            _ => return ReponseValue::Error("key must be bulk string".to_string()),
+        };
+
+        let mut values = Vec::with_capacity(args.len() - 1);
+        for arg in &args[1..] {
+            if let ReponseValue::BulkString(Some(bytes)) = arg {
+                let to_push = Bytes::from(bytes.clone());
+                values.push(to_push);
+            } else {
+                return ReponseValue::Error("pushed values must be bulk strings".to_string());
+            }
+        }
+
+        match self.kv.lpush(key.to_string(), values) {
+            Ok(size) => ReponseValue::Integer(size),
+            Err(err) => ReponseValue::Error(format!("internal db error: {:?}", err)),
+        }
+    }
+
+    fn handle_rpush(&self, args: &[ReponseValue]) -> ReponseValue {
+        let key = match &args[0] {
+            ReponseValue::BulkString(Some(bytes)) => String::from_utf8_lossy(bytes),
+            _ => return ReponseValue::Error("key must be bulk string".to_string()),
+        };
+
+        let mut values = Vec::with_capacity(args.len() - 1);
+        for arg in &args[1..] {
+            if let ReponseValue::BulkString(Some(bytes)) = arg {
+                let to_push = Bytes::from(bytes.clone());
+                values.push(to_push);
+            } else {
+                return ReponseValue::Error("pushed values must be bulk strings".to_string());
+            }
+        }
+
+        match self.kv.rpush(key.to_string(), values) {
+            Ok(size) => ReponseValue::Integer(size),
+            Err(err) => ReponseValue::Error(format!("internal db error: {:?}", err)),
         }
     }
 }
