@@ -1,29 +1,29 @@
 use std::{num::ParseIntError, string::FromUtf8Error};
 
 #[derive(Debug)]
-pub enum ReponseValue {
+pub enum ResponseValue {
     SimpleString(String),
     Error(String),
     Integer(i64),
     BulkString(Option<Vec<u8>>),
-    Array(Option<Vec<ReponseValue>>),
+    Array(Option<Vec<ResponseValue>>),
 }
 
-impl ReponseValue {
+impl ResponseValue {
     pub fn serialize(&self) -> Vec<u8> {
         match self {
-            ReponseValue::SimpleString(s) => format!("+{}\r\n", s).into_bytes(),
-            ReponseValue::Error(msg) => format!("-{}\r\n", msg).into_bytes(),
-            ReponseValue::Integer(i) => format!(":{}\r\n", i).into_bytes(),
-            ReponseValue::BulkString(None) => b"$-1\r\n".to_vec(),
-            ReponseValue::BulkString(Some(data)) => {
+            ResponseValue::SimpleString(s) => format!("+{}\r\n", s).into_bytes(),
+            ResponseValue::Error(msg) => format!("-{}\r\n", msg).into_bytes(),
+            ResponseValue::Integer(i) => format!(":{}\r\n", i).into_bytes(),
+            ResponseValue::BulkString(None) => b"$-1\r\n".to_vec(),
+            ResponseValue::BulkString(Some(data)) => {
                 let mut bytes = Vec::new();
                 bytes.extend_from_slice(format!("${}\r\n", data.len()).as_bytes());
                 bytes.extend_from_slice(data);
                 bytes.extend_from_slice(b"\r\n");
                 bytes
             }
-            ReponseValue::Array(Some(items)) => {
+            ResponseValue::Array(Some(items)) => {
                 let mut bytes = Vec::new();
                 bytes.extend_from_slice(format!("*{}\r\n", items.len()).as_bytes());
                 for item in items {
@@ -31,7 +31,7 @@ impl ReponseValue {
                 }
                 bytes
             }
-            ReponseValue::Array(None) => b"*-1\r\n".to_vec(),
+            ResponseValue::Array(None) => b"*-1\r\n".to_vec(),
         }
     }
 }
@@ -120,7 +120,7 @@ impl<'a> Parser<'a> {
         Ok(output)
     }
 
-    pub fn parse(&mut self) -> Result<ReponseValue, BufParseError> {
+    pub fn parse(&mut self) -> Result<ResponseValue, BufParseError> {
         match self.peek() {
             Some(b'+') => self.parse_simple_string(),
             Some(b'-') => self.parse_simple_error(),
@@ -132,7 +132,7 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn parse_simple_string(&mut self) -> Result<ReponseValue, BufParseError> {
+    fn parse_simple_string(&mut self) -> Result<ResponseValue, BufParseError> {
         let first_byte = self.peek().ok_or(BufParseError::InvalidFirstByte(None))?;
 
         expect_byte(first_byte, b'+')?;
@@ -141,10 +141,10 @@ impl<'a> Parser<'a> {
 
         let line = self.read_line()?;
 
-        Ok(ReponseValue::SimpleString(line))
+        Ok(ResponseValue::SimpleString(line))
     }
 
-    fn parse_simple_error(&mut self) -> Result<ReponseValue, BufParseError> {
+    fn parse_simple_error(&mut self) -> Result<ResponseValue, BufParseError> {
         let first_byte = self.peek().ok_or(BufParseError::InvalidFirstByte(None))?;
 
         expect_byte(first_byte, b'-')?;
@@ -153,10 +153,10 @@ impl<'a> Parser<'a> {
 
         let line = self.read_line()?;
 
-        Ok(ReponseValue::Error(line))
+        Ok(ResponseValue::Error(line))
     }
 
-    fn parse_integer(&mut self) -> Result<ReponseValue, BufParseError> {
+    fn parse_integer(&mut self) -> Result<ResponseValue, BufParseError> {
         let first_byte = self.peek().ok_or(BufParseError::InvalidFirstByte(None))?;
 
         expect_byte(first_byte, b':')?;
@@ -164,10 +164,10 @@ impl<'a> Parser<'a> {
         self.cursor += 1;
 
         let value = self.read_line()?.parse::<i64>()?;
-        Ok(ReponseValue::Integer(value))
+        Ok(ResponseValue::Integer(value))
     }
 
-    fn parse_bulk_string(&mut self) -> Result<ReponseValue, BufParseError> {
+    fn parse_bulk_string(&mut self) -> Result<ResponseValue, BufParseError> {
         let first_byte = self.peek().ok_or(BufParseError::InvalidFirstByte(None))?;
 
         expect_byte(first_byte, b'$')?;
@@ -175,7 +175,7 @@ impl<'a> Parser<'a> {
         self.cursor += 1;
         let length = self.read_line()?.parse::<i64>()?;
         if length < 0 {
-            return Ok(ReponseValue::BulkString(None));
+            return Ok(ResponseValue::BulkString(None));
         }
 
         let length = length as usize;
@@ -210,10 +210,10 @@ impl<'a> Parser<'a> {
 
         self.cursor += 1;
 
-        Ok(ReponseValue::BulkString(Some(bytes.to_vec())))
+        Ok(ResponseValue::BulkString(Some(bytes.to_vec())))
     }
 
-    fn parse_array(&mut self) -> Result<ReponseValue, BufParseError> {
+    fn parse_array(&mut self) -> Result<ResponseValue, BufParseError> {
         let first_byte = self.peek().ok_or(BufParseError::InvalidFirstByte(None))?;
 
         expect_byte(first_byte, b'*')?;
@@ -222,7 +222,7 @@ impl<'a> Parser<'a> {
         let length = self.read_line()?.parse::<i64>()?;
 
         if length < 0 {
-            return Ok(ReponseValue::Array(None));
+            return Ok(ResponseValue::Array(None));
         }
 
         let mut items = Vec::new();
@@ -232,6 +232,6 @@ impl<'a> Parser<'a> {
             items.push(value);
         }
 
-        Ok(ReponseValue::Array(Some(items)))
+        Ok(ResponseValue::Array(Some(items)))
     }
 }

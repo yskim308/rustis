@@ -2,15 +2,15 @@ use bytes::Bytes;
 use std::sync::Arc;
 
 use crate::kv::{KvStore, RedisValue};
-use crate::parser::ReponseValue;
+use crate::parser::ResponseValue;
 
 pub struct CommandHandler {
     kv: Arc<KvStore>,
 }
 
-fn parse_int(value: &ReponseValue) -> Result<i64, String> {
+fn parse_int(value: &ResponseValue) -> Result<i64, String> {
     match value {
-        ReponseValue::BulkString(Some(bytes)) => {
+        ResponseValue::BulkString(Some(bytes)) => {
             let s = std::str::from_utf8(bytes)
                 .map_err(|_| "ERR value is not valid utf8".to_string())?;
             s.parse::<i64>()
@@ -25,150 +25,150 @@ impl CommandHandler {
         CommandHandler { kv }
     }
 
-    pub fn process_command(&self, value: ReponseValue) -> ReponseValue {
+    pub fn process_command(&self, value: ResponseValue) -> ResponseValue {
         let items = match value {
-            ReponseValue::Array(Some(items)) => items,
-            _ => return ReponseValue::Error("request must be array".to_string()),
+            ResponseValue::Array(Some(items)) => items,
+            _ => return ResponseValue::Error("request must be array".to_string()),
         };
 
         if items.is_empty() {
-            return ReponseValue::Error("empty request".to_string());
+            return ResponseValue::Error("empty request".to_string());
         }
 
         let (cmd, args) = match items.split_first() {
-            Some((ReponseValue::BulkString(Some(bytes)), rest)) => {
+            Some((ResponseValue::BulkString(Some(bytes)), rest)) => {
                 (String::from_utf8_lossy(bytes).to_uppercase(), rest)
             }
-            _ => return ReponseValue::Error("command must be bulk string".to_string()),
+            _ => return ResponseValue::Error("command must be bulk string".to_string()),
         };
 
         match cmd.as_str() {
-            "PING" => ReponseValue::SimpleString("PONG".to_string()),
+            "PING" => ResponseValue::SimpleString("PONG".to_string()),
             "GET" => self.handle_get(args),
             "SET" => self.handle_set(args),
             "LPUSH" => self.handle_lpush(args),
             "RPUSH" => self.handle_rpush(args),
             "LRANGE" => self.handle_lrange(args),
-            _ => ReponseValue::Error("invalid command".to_string()),
+            _ => ResponseValue::Error("invalid command".to_string()),
         }
     }
 
-    fn handle_get(&self, args: &[ReponseValue]) -> ReponseValue {
+    fn handle_get(&self, args: &[ResponseValue]) -> ResponseValue {
         if args.len() != 1 {
-            return ReponseValue::Error(
+            return ResponseValue::Error(
                 "ERR wrong number of arguments for 'get' command".to_string(),
             );
         }
 
         let key = match &args[0] {
-            ReponseValue::BulkString(Some(bytes)) => String::from_utf8_lossy(bytes),
-            _ => return ReponseValue::Error("ERR key must be bulk string".to_string()),
+            ResponseValue::BulkString(Some(bytes)) => String::from_utf8_lossy(bytes),
+            _ => return ResponseValue::Error("ERR key must be bulk string".to_string()),
         };
 
         match self.kv.get(&key) {
-            Ok(Some(RedisValue::String(b))) => ReponseValue::BulkString(Some(b.to_vec())),
-            Ok(Some(_)) => ReponseValue::Error(
+            Ok(Some(RedisValue::String(b))) => ResponseValue::BulkString(Some(b.to_vec())),
+            Ok(Some(_)) => ResponseValue::Error(
                 "WRONGTYPE Operation against a key holding the wrong kind of value".to_string(),
             ),
-            Ok(None) => ReponseValue::BulkString(None),
-            Err(_) => ReponseValue::Error("internal server error".to_string()),
+            Ok(None) => ResponseValue::BulkString(None),
+            Err(_) => ResponseValue::Error("internal server error".to_string()),
         }
     }
 
-    fn handle_set(&self, args: &[ReponseValue]) -> ReponseValue {
+    fn handle_set(&self, args: &[ResponseValue]) -> ResponseValue {
         if args.len() != 2 {
-            return ReponseValue::Error(
+            return ResponseValue::Error(
                 "ERR wrong number of arguments for 'set' command".to_string(),
             );
         }
 
         let key = match &args[0] {
-            ReponseValue::BulkString(Some(bytes)) => String::from_utf8_lossy(bytes).into_owned(),
-            _ => return ReponseValue::Error("ERR key must be bulk string".to_string()),
+            ResponseValue::BulkString(Some(bytes)) => String::from_utf8_lossy(bytes).into_owned(),
+            _ => return ResponseValue::Error("ERR key must be bulk string".to_string()),
         };
 
         let value = match &args[1] {
-            ReponseValue::BulkString(Some(bytes)) => Bytes::from(bytes.clone()),
-            _ => return ReponseValue::Error("ERR value must be bulk string".to_string()),
+            ResponseValue::BulkString(Some(bytes)) => Bytes::from(bytes.clone()),
+            _ => return ResponseValue::Error("ERR value must be bulk string".to_string()),
         };
 
         match self.kv.set(key, value) {
-            Ok(()) => ReponseValue::SimpleString("OK".to_string()),
-            Err(_) => ReponseValue::Error("internal server error (poisoned lock)".to_string()),
+            Ok(()) => ResponseValue::SimpleString("OK".to_string()),
+            Err(_) => ResponseValue::Error("internal server error (poisoned lock)".to_string()),
         }
     }
 
-    fn handle_lpush(&self, args: &[ReponseValue]) -> ReponseValue {
+    fn handle_lpush(&self, args: &[ResponseValue]) -> ResponseValue {
         let key = match &args[0] {
-            ReponseValue::BulkString(Some(bytes)) => String::from_utf8_lossy(bytes),
-            _ => return ReponseValue::Error("key must be bulk string".to_string()),
+            ResponseValue::BulkString(Some(bytes)) => String::from_utf8_lossy(bytes),
+            _ => return ResponseValue::Error("key must be bulk string".to_string()),
         };
 
         let mut values = Vec::with_capacity(args.len() - 1);
         for arg in &args[1..] {
-            if let ReponseValue::BulkString(Some(bytes)) = arg {
+            if let ResponseValue::BulkString(Some(bytes)) = arg {
                 let to_push = Bytes::from(bytes.clone());
                 values.push(to_push);
             } else {
-                return ReponseValue::Error("pushed values must be bulk strings".to_string());
+                return ResponseValue::Error("pushed values must be bulk strings".to_string());
             }
         }
 
         match self.kv.lpush(key.to_string(), values) {
-            Ok(size) => ReponseValue::Integer(size),
-            Err(err) => ReponseValue::Error(format!("internal db error: {:?}", err)),
+            Ok(size) => ResponseValue::Integer(size),
+            Err(err) => ResponseValue::Error(format!("internal db error: {:?}", err)),
         }
     }
 
-    fn handle_rpush(&self, args: &[ReponseValue]) -> ReponseValue {
+    fn handle_rpush(&self, args: &[ResponseValue]) -> ResponseValue {
         let key = match &args[0] {
-            ReponseValue::BulkString(Some(bytes)) => String::from_utf8_lossy(bytes),
-            _ => return ReponseValue::Error("key must be bulk string".to_string()),
+            ResponseValue::BulkString(Some(bytes)) => String::from_utf8_lossy(bytes),
+            _ => return ResponseValue::Error("key must be bulk string".to_string()),
         };
 
         let mut values = Vec::with_capacity(args.len() - 1);
         for arg in &args[1..] {
-            if let ReponseValue::BulkString(Some(bytes)) = arg {
+            if let ResponseValue::BulkString(Some(bytes)) = arg {
                 let to_push = Bytes::from(bytes.clone());
                 values.push(to_push);
             } else {
-                return ReponseValue::Error("pushed values must be bulk strings".to_string());
+                return ResponseValue::Error("pushed values must be bulk strings".to_string());
             }
         }
 
         match self.kv.rpush(key.to_string(), values) {
-            Ok(size) => ReponseValue::Integer(size),
-            Err(err) => ReponseValue::Error(format!("internal db error: {:?}", err)),
+            Ok(size) => ResponseValue::Integer(size),
+            Err(err) => ResponseValue::Error(format!("internal db error: {:?}", err)),
         }
     }
 
-    fn handle_lrange(&self, args: &[ReponseValue]) -> ReponseValue {
+    fn handle_lrange(&self, args: &[ResponseValue]) -> ResponseValue {
         let key = match &args[0] {
-            ReponseValue::BulkString(Some(bytes)) => String::from_utf8_lossy(bytes),
-            _ => return ReponseValue::Error("key must be bulk string".to_string()),
+            ResponseValue::BulkString(Some(bytes)) => String::from_utf8_lossy(bytes),
+            _ => return ResponseValue::Error("key must be bulk string".to_string()),
         };
 
         let start = match parse_int(&args[1]) {
             Ok(integer) => integer,
-            Err(err) => return ReponseValue::Error(err),
+            Err(err) => return ResponseValue::Error(err),
         };
 
         let stop = match parse_int(&args[2]) {
             Ok(integer) => integer,
-            Err(err) => return ReponseValue::Error(err),
+            Err(err) => return ResponseValue::Error(err),
         };
 
         match self.kv.lrange(&key, start, stop) {
             Ok(bytes_vec) => {
                 // Convert Vec<Bytes> -> Vec<ReponseValue>
-                let response_elements: Vec<ReponseValue> = bytes_vec
+                let response_elements: Vec<ResponseValue> = bytes_vec
                     .into_iter()
-                    .map(|b| ReponseValue::BulkString(Some(b.to_vec())))
+                    .map(|b| ResponseValue::BulkString(Some(b.to_vec())))
                     .collect();
 
-                ReponseValue::Array(Some(response_elements))
+                ResponseValue::Array(Some(response_elements))
             }
-            Err(err) => ReponseValue::Error(format!("ERR {:?}", err)),
+            Err(err) => ResponseValue::Error(format!("ERR {:?}", err)),
         }
     }
 }
