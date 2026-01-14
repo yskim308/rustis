@@ -72,7 +72,7 @@ impl KvStore {
         Ok(db.remove(key).is_some())
     }
 
-    pub fn lpush(&self, key: String, values: Vec<Bytes>) -> Result<usize, DatabaseError> {
+    pub fn lpush(&self, key: String, values: Vec<Bytes>) -> Result<i64, DatabaseError> {
         let mut db = self.db.write().map_err(|_| DatabaseError::PoisonedLock)?;
         let entry = db
             .entry(key)
@@ -82,13 +82,13 @@ impl KvStore {
                 for val in values {
                     list.push_front(val);
                 }
-                Ok(list.len())
+                Ok(list.len() as i64)
             }
             _ => Err(DatabaseError::WrongType),
         }
     }
 
-    pub fn rpush(&self, key: String, values: Vec<Bytes>) -> Result<usize, DatabaseError> {
+    pub fn rpush(&self, key: String, values: Vec<Bytes>) -> Result<i64, DatabaseError> {
         let mut db = self.db.write().map_err(|_| DatabaseError::PoisonedLock)?;
         let entry = db
             .entry(key)
@@ -98,7 +98,7 @@ impl KvStore {
                 for val in values {
                     list.push_back(val);
                 }
-                Ok(list.len())
+                Ok(list.len() as i64)
             }
             _ => Err(DatabaseError::WrongType),
         }
