@@ -173,6 +173,63 @@ impl KvStore {
 
         Ok(result)
     }
+
+    pub fn sadd(&self, key: String, values: Vec<Bytes>) -> Result<i64, DatabaseError> {
+        let mut db = self.db.write().map_err(|_| DatabaseError::PoisonedLock)?;
+        let entry = db
+            .entry(key)
+            .or_insert_with(|| RedisValue::Set(HashSet::new()));
+
+        match entry {
+            RedisValue::Set(set) => {
+                for val in values {
+                    set.insert(val);
+                }
+                Ok(set.len() as i64)
+            }
+            _ => Err(DatabaseError::WrongType),
+        }
+    }
+
+    pub fn spop(&self, key: &str, count: i64) -> Result<Vec<Bytes>, DatabaseError> {
+        let mut db = self.db.write().map_err(|_| DatabaseError::PoisonedLock)?;
+
+        let (popped_elements, should_remove) = match db.get_mut(key) {
+            Some(RedisValue::Set(set)) => {
+                let num_to_pop = std::cmp::min(set.len(), count as usize);
+                let mut popped = Vec::with_capacity(num_to_pop);
+
+                for _ in 0..num_to_pop {
+                    if let Some(member) = set.iter().next().cloned() {
+                        set.remove(&member);
+                        popped.push(member);
+                    }
+                }
+                (popped, set.is_empty())
+            }
+            Some(_) => return Err(DatabaseError::WrongType),
+            None => return Ok(vec![]),
+        };
+
+        if should_remove {
+            db.remove(key);
+        }
+
+        Ok(popped_elements)
+    }
+
+    pub fn smembers(&self, key: &str) -> Result<Vec<Bytes>, DatabaseError> {
+        let db = self.db.read().map_err(|_| DatabaseError::PoisonedLock)?;
+
+        match db.get(key) {
+            Some(RedisValue::Set(set)) => {
+                let members: Vec<Bytes> = set.iter().cloned().collect();
+                Ok(members)
+            }
+            Some(_) => Err(DatabaseError::WrongType),
+            None => Ok(vec![]),
+        }
+    }
 }
 
 // =================== UNIT TESTS ========================
