@@ -88,6 +88,26 @@ impl KvStore {
         }
     }
 
+    pub fn lpop(&self, key: &str, count: i64) -> Result<Vec<Bytes>, DatabaseError> {
+        let mut db = self.db.write().map_err(|_| DatabaseError::PoisonedLock)?;
+        let (popped_elements, should_remove) = match db.get_mut(key) {
+            Some(RedisValue::List(list)) => {
+                let length = list.len();
+                let num_pop = std::cmp::min(length, count as usize);
+                let popped: Vec<Bytes> = list.drain(..num_pop).collect();
+                (popped, list.is_empty())
+            }
+            Some(_) => return Err(DatabaseError::WrongType),
+            None => return Ok(vec![]),
+        };
+
+        if should_remove {
+            db.remove(key);
+        }
+
+        Ok(popped_elements)
+    }
+
     pub fn rpush(&self, key: String, values: Vec<Bytes>) -> Result<i64, DatabaseError> {
         let mut db = self.db.write().map_err(|_| DatabaseError::PoisonedLock)?;
         let entry = db
@@ -102,6 +122,26 @@ impl KvStore {
             }
             _ => Err(DatabaseError::WrongType),
         }
+    }
+
+    pub fn rpop(&self, key: &str, count: i64) -> Result<Vec<Bytes>, DatabaseError> {
+        let mut db = self.db.write().map_err(|_| DatabaseError::PoisonedLock)?;
+        let (popped_elements, should_remove) = match db.get_mut(key) {
+            Some(RedisValue::List(list)) => {
+                let length = list.len();
+                let num_pop = std::cmp::min(length, count as usize);
+                let popped: Vec<Bytes> = list.drain((length - num_pop)..).collect();
+                (popped, list.is_empty())
+            }
+            Some(_) => return Err(DatabaseError::WrongType),
+            None => return Ok(vec![]),
+        };
+
+        if should_remove {
+            db.remove(key);
+        }
+
+        Ok(popped_elements)
     }
 
     pub fn lrange(&self, key: &str, start: i64, stop: i64) -> Result<Vec<Bytes>, DatabaseError> {
