@@ -13,7 +13,6 @@ pub enum RedisValue {
     String(Bytes),
     List(VecDeque<Bytes>),
     Set(HashSet<Bytes>),
-    Hash(HashMap<String, Bytes>),
 }
 /// We use Arc to share it across connection tasks and RwLock to allow
 /// concurrent reads but exclusive writes.
