@@ -47,7 +47,9 @@ impl CommandHandler {
             "GET" => self.handle_get(args),
             "SET" => self.handle_set(args),
             "LPUSH" => self.handle_lpush(args),
+            "LPOP" => self.handle_lpop(args),
             "RPUSH" => self.handle_rpush(args),
+            "RPOP" => self.handle_rpop(args),
             "LRANGE" => self.handle_lrange(args),
             _ => ResponseValue::Error("invalid command".to_string()),
         }
@@ -120,6 +122,38 @@ impl CommandHandler {
         }
     }
 
+    fn handle_lpop(&self, args: &[ResponseValue]) -> ResponseValue {
+        let key = match &args[0] {
+            ResponseValue::BulkString(Some(bytes)) => String::from_utf8_lossy(bytes),
+            _ => return ResponseValue::Error("key must be bulk string".to_string()),
+        };
+
+        let count = match &args[1] {
+            ResponseValue::BulkString(Some(bytes)) => {
+                match String::from_utf8_lossy(bytes).parse::<i64>() {
+                    Ok(num) => num,
+                    Err(err) => return ResponseValue::Error(format!("Err: {:?}", err)),
+                }
+            }
+            _ => 0,
+        };
+
+        match self.kv.lpop(&key, count) {
+            Ok(bytes_vec) => {
+                if bytes_vec.len() == 1 {
+                    ResponseValue::BulkString(Some(bytes_vec[0].to_vec()))
+                } else {
+                    let response_elements: Vec<ResponseValue> = bytes_vec
+                        .into_iter()
+                        .map(|b| ResponseValue::BulkString(Some(b.to_vec())))
+                        .collect();
+                    ResponseValue::Array(Some(response_elements))
+                }
+            }
+            Err(err) => ResponseValue::Error(format!("ERR {:?}", err)),
+        }
+    }
+
     fn handle_rpush(&self, args: &[ResponseValue]) -> ResponseValue {
         let key = match &args[0] {
             ResponseValue::BulkString(Some(bytes)) => String::from_utf8_lossy(bytes),
@@ -139,6 +173,38 @@ impl CommandHandler {
         match self.kv.rpush(key.to_string(), values) {
             Ok(size) => ResponseValue::Integer(size),
             Err(err) => ResponseValue::Error(format!("internal db error: {:?}", err)),
+        }
+    }
+
+    fn handle_rpop(&self, args: &[ResponseValue]) -> ResponseValue {
+        let key = match &args[0] {
+            ResponseValue::BulkString(Some(bytes)) => String::from_utf8_lossy(bytes),
+            _ => return ResponseValue::Error("key must be bulk string".to_string()),
+        };
+
+        let count = match &args[1] {
+            ResponseValue::BulkString(Some(bytes)) => {
+                match String::from_utf8_lossy(bytes).parse::<i64>() {
+                    Ok(num) => num,
+                    Err(err) => return ResponseValue::Error(format!("Err: {:?}", err)),
+                }
+            }
+            _ => 0,
+        };
+
+        match self.kv.rpop(&key, count) {
+            Ok(bytes_vec) => {
+                if bytes_vec.len() == 1 {
+                    ResponseValue::BulkString(Some(bytes_vec[0].to_vec()))
+                } else {
+                    let response_elements: Vec<ResponseValue> = bytes_vec
+                        .into_iter()
+                        .map(|b| ResponseValue::BulkString(Some(b.to_vec())))
+                        .collect();
+                    ResponseValue::Array(Some(response_elements))
+                }
+            }
+            Err(err) => ResponseValue::Error(format!("ERR {:?}", err)),
         }
     }
 
