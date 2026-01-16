@@ -182,10 +182,13 @@ impl KvStore {
 
         match entry {
             RedisValue::Set(set) => {
+                let mut count = 0;
                 for val in values {
-                    set.insert(val);
+                    if set.insert(val) {
+                        count += 1
+                    };
                 }
-                Ok(set.len() as i64)
+                Ok(count)
             }
             _ => Err(DatabaseError::WrongType),
         }
