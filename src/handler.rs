@@ -293,7 +293,7 @@ impl CommandHandler {
                 Ok(n) => n,
                 Err(e) => return ResponseValue::Error(e),
             },
-            None => return ResponseValue::Error("ERR invalid number of arguments".to_string()),
+            None => 1,
         };
 
         match self.kv.spop(&key, count) {
