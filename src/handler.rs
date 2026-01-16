@@ -51,6 +51,9 @@ impl CommandHandler {
             "RPUSH" => self.handle_rpush(args),
             "RPOP" => self.handle_rpop(args),
             "LRANGE" => self.handle_lrange(args),
+            "SADD" => self.handle_sadd(args),
+            "SPOP" => self.handle_spop(args),
+            "SMEMBERS" => self.handle_smembers(args),
             _ => ResponseValue::Error("invalid command".to_string()),
         }
     }
@@ -252,6 +255,75 @@ impl CommandHandler {
                 ResponseValue::Array(Some(response_elements))
             }
             Err(err) => ResponseValue::Error(format!("ERR {:?}", err)),
+        }
+    }
+
+    fn handle_sadd(&self, args: &[ResponseValue]) -> ResponseValue {
+        let key = match args.first() {
+            Some(ResponseValue::BulkString(Some(bytes))) => String::from_utf8_lossy(bytes),
+            Some(_) => return ResponseValue::Error("ERR key must be bulk string".to_string()),
+            None => return ResponseValue::Error("ERR invalid number of arguments".to_string()),
+        };
+
+        let mut values = Vec::with_capacity(args.len().saturating_sub(1));
+        for arg in &args[1..] {
+            if let ResponseValue::BulkString(Some(bytes)) = arg {
+                let to_push = Bytes::from(bytes.clone());
+                values.push(to_push);
+            } else {
+                return ResponseValue::Error("ERR pushed values must be bulk strings".to_string());
+            }
+        }
+
+        match self.kv.sadd(key.to_string(), values) {
+            Ok(size) => ResponseValue::Integer(size),
+            Err(err) => ResponseValue::Error(format!("ERR internal db error: {:?}", err)),
+        }
+    }
+
+    fn handle_spop(&self, args: &[ResponseValue]) -> ResponseValue {
+        let key = match args.first() {
+            Some(ResponseValue::BulkString(Some(bytes))) => String::from_utf8_lossy(bytes),
+            Some(_) => return ResponseValue::Error("ERR key must be bulk string".to_string()),
+            None => return ResponseValue::Error("ERR invalid number of arguments".to_string()),
+        };
+
+        let count = match args.get(1) {
+            Some(value) => match parse_int(value) {
+                Ok(n) => n,
+                Err(e) => return ResponseValue::Error(e),
+            },
+            None => return ResponseValue::Error("ERR invalid number of arguments".to_string()),
+        };
+
+        match self.kv.spop(&key, count) {
+            Ok(bytes_vec) => {
+                let response_vector: Vec<ResponseValue> = bytes_vec
+                    .into_iter()
+                    .map(|b| ResponseValue::BulkString(Some(b.to_vec())))
+                    .collect();
+                ResponseValue::Array(Some(response_vector))
+            }
+            Err(e) => ResponseValue::Error(format!("ERR: {:?}", e)),
+        }
+    }
+
+    fn handle_smembers(&self, args: &[ResponseValue]) -> ResponseValue {
+        let key = match args.first() {
+            Some(ResponseValue::BulkString(Some(bytes))) => String::from_utf8_lossy(bytes),
+            Some(_) => return ResponseValue::Error("ERR key must be bulk string".to_string()),
+            None => return ResponseValue::Error("ERR invalid number of arguments".to_string()),
+        };
+
+        match self.kv.smembers(&key) {
+            Ok(bytes_vec) => {
+                let response_elements: Vec<ResponseValue> = bytes_vec
+                    .into_iter()
+                    .map(|b| ResponseValue::BulkString(Some(b.to_vec())))
+                    .collect();
+                ResponseValue::Array(Some(response_elements))
+            }
+            Err(e) => ResponseValue::Error(format!("ERR {:?}", e)),
         }
     }
 }
