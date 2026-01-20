@@ -53,8 +53,19 @@ async fn handle_connection(mut stream: TcpStream, kv: Arc<KvStore>) -> tokio::io
                     // Not enough data yet, continue reading from the socket
                     break;
                 }
-                Err(e) => {
-                    eprintln!("Parse error: {:?}", e);
+                Err(BufParseError::InvalidFirstByte(b)) => {
+                    match b {
+                        Some(byte) => {
+                            stream
+                                .write_all(format!("-invalid first byte: {}\r\n", byte).as_bytes())
+                                .await?
+                        }
+                        None => stream.write_all(b"-first byte not found\r\n").await?,
+                    };
+                    return Ok(());
+                }
+                _ => {
+                    stream.write_all(b"-internal server error\r\n").await?;
                     return Ok(());
                 }
             }
