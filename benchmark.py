@@ -22,13 +22,15 @@ TEST_SUITES = {
         "cmd": [
             "redis-benchmark",
             "-t",
-            "set,get,lpush,lpop,rpop",
+            "set,get,lpush,lpop",
             "-c",
             "2000",  # 2k concurrent connections
             "-P",
             "32",  # Batch 32 commands (High throughput)
             "-n",
             "1000000",  # 1M requests to let it heat up
+            "-r",
+            "100000",
             "-q",
         ],
     },
@@ -47,7 +49,8 @@ TEST_SUITES = {
             "4096",  # 4KB payload size
             "-n",
             "500000",
-            "-q",
+            "-r",
+            "100000" "-q",
         ],
     },
 }
