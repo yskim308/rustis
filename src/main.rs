@@ -26,7 +26,10 @@ async fn main() -> tokio::io::Result<()> {
         let kv_clone = kv.clone();
         tokio::spawn(async move {
             if let Err(e) = handle_connection(stream, kv_clone).await {
-                eprintln!("Error handling connection: {:?}", e);
+                match e.kind() {
+                    std::io::ErrorKind::ConnectionReset => {}
+                    _ => eprintln!("Error handling connection: {:?}", e),
+                }
             }
         });
     }
