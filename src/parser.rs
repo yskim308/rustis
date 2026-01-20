@@ -131,6 +131,19 @@ impl Parser {
     }
 
     pub fn parse(&mut self) -> Result<ResponseValue, BufParseError> {
+        let start = self.cursor;
+
+        match self.parse_internal() {
+            Ok(val) => Ok(val),
+            Err(BufParseError::Incomplete) => {
+                self.cursor = start;
+                Err(BufParseError::Incomplete)
+            }
+            Err(e) => Err(e),
+        }
+    }
+
+    fn parse_internal(&mut self) -> Result<ResponseValue, BufParseError> {
         match self.peek() {
             Some(b'+') => self.parse_simple_string(),
             Some(b'-') => self.parse_simple_error(),
