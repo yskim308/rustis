@@ -45,7 +45,6 @@ async fn handle_connection(mut stream: TcpStream, kv: Arc<KvStore>) -> tokio::io
         loop {
             match parser.parse() {
                 Ok(value) => {
-                    println!("Parsed: {:?}", value);
                     let response = handler.process_command(value);
                     stream.write_all(&response.serialize()).await?;
                 }

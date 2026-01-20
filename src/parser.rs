@@ -151,7 +151,7 @@ impl Parser {
             Some(b'$') => self.parse_bulk_string(),
             Some(b'*') => self.parse_array(),
             Some(byte) => Err(BufParseError::InvalidFirstByte(Some(byte))),
-            None => Err(BufParseError::InvalidFirstByte(None)),
+            None => Err(BufParseError::Incomplete),
         }
     }
 
