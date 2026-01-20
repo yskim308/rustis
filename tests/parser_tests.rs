@@ -2,8 +2,8 @@ use rustis::parser::{BufParseError, Parser, ResponseValue};
 
 // Helper to reduce boilerplate
 fn parse_buffer(input: &[u8]) -> Result<ResponseValue, BufParseError> {
-    let input_to_vec = input.to_vec();
-    let mut parser = Parser::new(&input_to_vec);
+    let mut parser = Parser::new(4096);
+    parser.buffer.extend_from_slice(input);
     parser.parse()
 }
 
