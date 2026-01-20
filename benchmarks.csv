@@ -1,0 +1,11 @@
+Timestamp,Git Hash,Note,Test Name,Command,RPS,Latency (p50)
+2026-01-20 20:07:53,6d278de,redis_baseline,Quick Sanity Check,INLINE,124999.99,0.207
+2026-01-20 20:07:53,6d278de,redis_baseline,Quick Sanity Check,MBULK,83333.34,0.543
+2026-01-20 20:07:56,6d278de,redis_baseline,Regular Load (Baseline),SET,236686.38,0.111
+2026-01-20 20:07:56,6d278de,redis_baseline,Regular Load (Baseline),GET,245700.25,0.111
+2026-01-20 20:08:06,6d278de,redis_baseline,High Concurrency & Throughput (Mixed),SET,874890.62,76.351
+2026-01-20 20:08:06,6d278de,redis_baseline,High Concurrency & Throughput (Mixed),GET,2857143.00,18.351
+2026-01-20 20:08:06,6d278de,redis_baseline,High Concurrency & Throughput (Mixed),LPUSH,2525252.50,21.615
+2026-01-20 20:08:06,6d278de,redis_baseline,High Concurrency & Throughput (Mixed),LPOP,2450980.50,22.367
+2026-01-20 20:08:11,6d278de,redis_baseline,Heavy Payload Saturation (4KB),SET,480769.25,9.919
+2026-01-20 20:08:11,6d278de,redis_baseline,Heavy Payload Saturation (4KB),GET,618811.88,19.535
