@@ -212,6 +212,6 @@ fn test_array_incomplete() {
     let input = b"*2\r\n:1\r\n";
     let result = parse_buffer(input);
 
-    assert!(matches!(result, Err(BufParseError::InvalidFirstByte(None))));
+    assert!(matches!(result, Err(BufParseError::Incomplete)));
     // Or UnexpectedEOF, depending on where your loop hits the end
 }
