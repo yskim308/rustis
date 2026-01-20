@@ -41,7 +41,6 @@ impl ResponseValue {
 #[derive(Debug, PartialEq)]
 pub enum BufParseError {
     Incomplete,
-    InvalidLength,
     UnexpectedEOF { expected: &'static str },
     InvalidFirstByte(Option<u8>),
     UnexpectedByte { expected: u8, found: Option<u8> },
@@ -221,7 +220,7 @@ impl Parser {
 
         let length = length as usize;
         if self.cursor + length > self.buffer.len() {
-            return Err(BufParseError::InvalidLength);
+            return Err(BufParseError::Incomplete);
         }
         let bytes = &self.buffer[self.cursor..self.cursor + length];
 
