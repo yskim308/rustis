@@ -150,9 +150,27 @@ impl Parser {
             Some(b':') => self.parse_integer(),
             Some(b'$') => self.parse_bulk_string(),
             Some(b'*') => self.parse_array(),
+            Some(byte) if byte.is_ascii_alphabetic() => self.parse_inline(),
             Some(byte) => Err(BufParseError::InvalidFirstByte(Some(byte))),
             None => Err(BufParseError::Incomplete),
         }
+    }
+
+    fn parse_inline(&mut self) -> Result<ResponseValue, BufParseError> {
+        let line = self.read_line()?;
+
+        let parts: Vec<&str> = line.split_ascii_whitespace().collect();
+
+        if parts.is_empty() {
+            return Err(BufParseError::InvalidFirstByte(None));
+        }
+
+        let items = parts
+            .into_iter()
+            .map(|s| ResponseValue::BulkString(Some(s.as_bytes().to_vec())))
+            .collect();
+
+        Ok(ResponseValue::Array(Some(items)))
     }
 
     fn parse_simple_string(&mut self) -> Result<ResponseValue, BufParseError> {

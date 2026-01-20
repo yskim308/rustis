@@ -54,6 +54,7 @@ impl CommandHandler {
             "SADD" => self.handle_sadd(args),
             "SPOP" => self.handle_spop(args),
             "SMEMBERS" => self.handle_smembers(args),
+            "CONFIG" => ResponseValue::Array(None),
             _ => ResponseValue::Error("invalid command".to_string()),
         }
     }
