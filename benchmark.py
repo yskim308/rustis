@@ -65,7 +65,7 @@ def run_test(key):
 
     try:
         # Run the command and stream output
-        subprocess.run(suite["cmd"], check=True)
+        subprocess.run(suite["cmd"])
     except KeyboardInterrupt:
         print("\n\033[91mTest interrupted by user.\033[0m")
     except FileNotFoundError:
