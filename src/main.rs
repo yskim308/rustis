@@ -33,39 +33,33 @@ async fn main() -> tokio::io::Result<()> {
 }
 
 async fn handle_connection(mut stream: TcpStream, kv: Arc<KvStore>) -> tokio::io::Result<()> {
-    let mut buffer = [0; 512];
-    let mut accumulated: Vec<u8> = Vec::new();
-
+    let mut parser = Parser::new(4096);
+    let handler = CommandHandler::new(kv.clone());
     loop {
-        let bytes_read = stream.read(&mut buffer).await?;
+        let bytes_read = stream.read_buf(&mut parser.buffer).await?;
 
         if bytes_read == 0 {
             return Ok(()); // Connection closed
         }
 
-        accumulated.extend_from_slice(&buffer[..bytes_read]);
-
-        // Note: Creating a new parser per loop is fine for now, but we'd want a state-ful parser
-        // later
-        let mut parser = Parser::new(&accumulated);
-        let handler = CommandHandler::new(kv.clone());
-
-        match parser.parse() {
-            Ok(value) => {
-                println!("Parsed: {:?}", value);
-                let response = handler.process_command(value);
-                // Echo back the data
-                stream.write_all(&response.serialize()).await?;
-                accumulated.clear();
-            }
-            Err(BufParseError::Incomplete) => {
-                // Not enough data yet, continue reading from the socket
-                continue;
-            }
-            Err(e) => {
-                eprintln!("Parse error: {:?}", e);
-                return Ok(());
+        loop {
+            match parser.parse() {
+                Ok(value) => {
+                    println!("Parsed: {:?}", value);
+                    let response = handler.process_command(value);
+                    stream.write_all(&response.serialize()).await?;
+                }
+                Err(BufParseError::Incomplete) => {
+                    // Not enough data yet, continue reading from the socket
+                    break;
+                }
+                Err(e) => {
+                    eprintln!("Parse error: {:?}", e);
+                    return Ok(());
+                }
             }
         }
+
+        parser.compact();
     }
 }

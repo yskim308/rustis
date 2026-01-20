@@ -1,5 +1,7 @@
 use std::{num::ParseIntError, string::FromUtf8Error};
 
+use bytes::{Buf, BytesMut};
+
 #[derive(Debug, PartialEq, Clone)]
 pub enum ResponseValue {
     SimpleString(String),
@@ -59,8 +61,8 @@ impl From<ParseIntError> for BufParseError {
     }
 }
 
-pub struct Parser<'a> {
-    buffer: &'a Vec<u8>,
+pub struct Parser {
+    pub buffer: BytesMut,
     cursor: usize,
 }
 
@@ -75,8 +77,9 @@ fn expect_byte(found: u8, expected: u8) -> Result<(), BufParseError> {
     Ok(())
 }
 
-impl<'a> Parser<'a> {
-    pub fn new(buffer: &'a Vec<u8>) -> Self {
+impl Parser {
+    pub fn new(capacity: usize) -> Self {
+        let buffer = BytesMut::with_capacity(capacity);
         Self { buffer, cursor: 0 }
     }
 
@@ -85,6 +88,13 @@ impl<'a> Parser<'a> {
             None
         } else {
             Some(self.buffer[self.cursor])
+        }
+    }
+
+    pub fn compact(&mut self) {
+        if self.cursor > 0 {
+            self.buffer.advance(self.cursor);
+            self.cursor = 0;
         }
     }
 
