@@ -8,33 +8,47 @@ import time
 TEST_SUITES = {
     "1": {
         "name": "Quick Sanity Check",
-        "desc": "Simple PING test to ensure server is alive",
+        "desc": "Simple PING to ensure server is alive (No Load)",
         "cmd": ["redis-benchmark", "-t", "ping", "-n", "1000", "-q"],
     },
     "2": {
-        "name": "Standard Load (Set/Get)",
-        "desc": "100k requests, 50 clients, default payload",
-        "cmd": ["redis-benchmark", "-t", "set,get", "-n", "100000", "-q"],
+        "name": "Regular Load (Baseline)",
+        "desc": "Standard 50 clients, no pipelining. Good for baseline latency.",
+        "cmd": ["redis-benchmark", "-t", "set,get", "-n", "200000", "-q"],
     },
     "3": {
-        "name": "High Concurrency (1k Clients)",
-        "desc": "Stress testing connection handling",
-        "cmd": ["redis-benchmark", "-t", "set,get", "-c", "1000", "-n", "100000", "-q"],
+        "name": "High Concurrency & Throughput (Mixed)",
+        "desc": "2000 Clients, Pipeline 32, 1 Million Requests. Tests CPU scaling across GET/SET/LIST.",
+        "cmd": [
+            "redis-benchmark",
+            "-t",
+            "set,get,lpush,lpop,rpop",
+            "-c",
+            "2000",  # 2k concurrent connections
+            "-P",
+            "32",  # Batch 32 commands (High throughput)
+            "-n",
+            "1000000",  # 1M requests to let it heat up
+            "-q",
+        ],
     },
     "4": {
-        "name": "Large Payload (4KB)",
-        "desc": "Simulating JSON blobs (4KB data)",
-        "cmd": ["redis-benchmark", "-t", "set,get", "-d", "4096", "-n", "50000", "-q"],
-    },
-    "5": {
-        "name": "List Operations (Queue Test)",
-        "desc": "Testing LPUSH, LPOP, RPOP",
-        "cmd": ["redis-benchmark", "-t", "lpush,lpop,rpop", "-n", "100000", "-q"],
-    },
-    "6": {
-        "name": "Pipeline Aggression",
-        "desc": "Batching 16 commands at once (High Throughput)",
-        "cmd": ["redis-benchmark", "-t", "set,get", "-P", "16", "-q"],
+        "name": "Heavy Payload Saturation (4KB)",
+        "desc": "High Concurrency + 4KB Payloads. Tests memory copying & bandwidth.",
+        "cmd": [
+            "redis-benchmark",
+            "-t",
+            "set,get",
+            "-c",
+            "1000",
+            "-P",
+            "16",
+            "-d",
+            "4096",  # 4KB payload size
+            "-n",
+            "500000",
+            "-q",
+        ],
     },
 }
 
