@@ -1,21 +1,25 @@
 Timestamp,Git Hash,Note,Test Name,Command,RPS,Latency (p50)
-2026-01-20 20:07:53,6d278de,redis_baseline,Quick Sanity Check,INLINE,124999.99,0.207
-2026-01-20 20:07:53,6d278de,redis_baseline,Quick Sanity Check,MBULK,83333.34,0.543
-2026-01-20 20:07:56,6d278de,redis_baseline,Regular Load (Baseline),SET,236686.38,0.111
-2026-01-20 20:07:56,6d278de,redis_baseline,Regular Load (Baseline),GET,245700.25,0.111
-2026-01-20 20:08:06,6d278de,redis_baseline,High Concurrency & Throughput (Mixed),SET,874890.62,76.351
-2026-01-20 20:08:06,6d278de,redis_baseline,High Concurrency & Throughput (Mixed),GET,2857143.00,18.351
-2026-01-20 20:08:06,6d278de,redis_baseline,High Concurrency & Throughput (Mixed),LPUSH,2525252.50,21.615
-2026-01-20 20:08:06,6d278de,redis_baseline,High Concurrency & Throughput (Mixed),LPOP,2450980.50,22.367
-2026-01-20 20:08:11,6d278de,redis_baseline,Heavy Payload Saturation (4KB),SET,480769.25,9.919
-2026-01-20 20:08:11,6d278de,redis_baseline,Heavy Payload Saturation (4KB),GET,618811.88,19.535
-2026-01-20 20:20:07,bc61772,rustis_unoptimized,Quick Sanity Check,INLINE,83333.34,0.583
-2026-01-20 20:20:07,bc61772,rustis_unoptimized,Quick Sanity Check,MBULK,71428.57,0.655
-2026-01-20 20:20:11,bc61772,rustis_unoptimized,Regular Load (Baseline),SET,163132.14,0.303
-2026-01-20 20:20:11,bc61772,rustis_unoptimized,Regular Load (Baseline),GET,181983.62,0.271
-2026-01-20 20:20:30,bc61772,rustis_unoptimized,High Concurrency & Throughput (Mixed),SET,281452.28,228.991
-2026-01-20 20:20:30,bc61772,rustis_unoptimized,High Concurrency & Throughput (Mixed),GET,370370.38,169.983
-2026-01-20 20:20:30,bc61772,rustis_unoptimized,High Concurrency & Throughput (Mixed),LPUSH,353982.28,179.327
-2026-01-20 20:20:30,bc61772,rustis_unoptimized,High Concurrency & Throughput (Mixed),LPOP,375939.84,161.919
-2026-01-20 20:20:38,bc61772,rustis_unoptimized,Heavy Payload Saturation (4KB),SET,152068.12,103.743
-2026-01-20 20:20:38,bc61772,rustis_unoptimized,Heavy Payload Saturation (4KB),GET,244498.77,58.879
+2026-01-21 21:19:05,8300573,redis_base,Quick Sanity Check,INLINE,142857.14,0.191
+2026-01-21 21:19:05,8300573,redis_base,Quick Sanity Check,MBULK,83333.34,0.631
+2026-01-21 21:19:08,8300573,redis_base,Regular Load (Baseline),SET,239520.97,0.111
+2026-01-21 21:19:08,8300573,redis_base,Regular Load (Baseline),GET,244798.05,0.111
+2026-01-21 21:19:22,8300573,redis_base,High Concurrency & Throughput (Mixed),SET,883392.25,76.351
+2026-01-21 21:19:22,8300573,redis_base,High Concurrency & Throughput (Mixed),GET,2865329.50,18.255
+2026-01-21 21:19:22,8300573,redis_base,High Concurrency & Throughput (Mixed),LPUSH,2577319.50,21.151
+2026-01-21 21:19:22,8300573,redis_base,High Concurrency & Throughput (Mixed),LPOP,2433090.00,22.783
+2026-01-21 21:19:22,8300573,redis_base,High Concurrency & Throughput (Mixed),SADD,2610966.25,20.447
+2026-01-21 21:19:22,8300573,redis_base,High Concurrency & Throughput (Mixed),SPOP,3225806.50,13.231
+2026-01-21 21:19:27,8300573,redis_base,Heavy Payload Saturation (4KB),SET,487804.88,9.727
+2026-01-21 21:19:27,8300573,redis_base,Heavy Payload Saturation (4KB),GET,603864.75,20.847
+2026-01-21 21:20:01,8300573,unoptimized_v1,Quick Sanity Check,INLINE,76923.08,0.591
+2026-01-21 21:20:01,8300573,unoptimized_v1,Quick Sanity Check,MBULK,90909.09,0.591
+2026-01-21 21:20:04,8300573,unoptimized_v1,Regular Load (Baseline),SET,162733.94,0.303
+2026-01-21 21:20:04,8300573,unoptimized_v1,Regular Load (Baseline),GET,182982.61,0.271
+2026-01-21 21:20:52,8300573,unoptimized_v1,High Concurrency & Throughput (Mixed),SET,297796.31,209.151
+2026-01-21 21:20:52,8300573,unoptimized_v1,High Concurrency & Throughput (Mixed),GET,358166.19,175.359
+2026-01-21 21:20:52,8300573,unoptimized_v1,High Concurrency & Throughput (Mixed),LPUSH,351741.12,178.559
+2026-01-21 21:20:52,8300573,unoptimized_v1,High Concurrency & Throughput (Mixed),LPOP,394011.03,161.663
+2026-01-21 21:20:52,8300573,unoptimized_v1,High Concurrency & Throughput (Mixed),SADD,300210.12,209.919
+2026-01-21 21:20:52,8300573,unoptimized_v1,High Concurrency & Throughput (Mixed),SPOP,46637.44,150.655
+2026-01-21 21:21:00,8300573,unoptimized_v1,Heavy Payload Saturation (4KB),SET,152160.69,103.935
+2026-01-21 21:21:00,8300573,unoptimized_v1,Heavy Payload Saturation (4KB),GET,265674.81,58.943

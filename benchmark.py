@@ -23,7 +23,7 @@ TEST_SUITES = {
         "cmd": [
             "redis-benchmark",
             "-t",
-            "set,get,lpush,lpop",
+            "set,get,lpush,lpop,sadd,spop",
             "-c",
             "2000",  # 2k concurrent connections
             "-P",
