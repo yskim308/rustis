@@ -1,4 +1,3 @@
-use bytes::Bytes;
 use std::sync::Arc;
 
 use crate::kv::{KvStore, RedisValue};
@@ -73,7 +72,7 @@ impl CommandHandler {
         };
 
         match self.kv.get(&key) {
-            Ok(Some(RedisValue::String(b))) => ResponseValue::BulkString(Some(b.to_vec())),
+            Ok(Some(RedisValue::String(b))) => ResponseValue::BulkString(Some(b)),
             Ok(Some(_)) => ResponseValue::Error(
                 "WRONGTYPE Operation against a key holding the wrong kind of value".to_string(),
             ),
@@ -98,7 +97,7 @@ impl CommandHandler {
         };
 
         let value = match args.get(1) {
-            Some(ResponseValue::BulkString(Some(bytes))) => Bytes::from(bytes.clone()),
+            Some(ResponseValue::BulkString(Some(bytes))) => bytes.clone(),
             Some(_) => return ResponseValue::Error("ERR value must be bulk string".to_string()),
             None => return ResponseValue::Error("ERR invalid number of arguments".to_string()),
         };
@@ -119,8 +118,7 @@ impl CommandHandler {
         let mut values = Vec::with_capacity(args.len().saturating_sub(1));
         for arg in &args[1..] {
             if let ResponseValue::BulkString(Some(bytes)) = arg {
-                let to_push = Bytes::from(bytes.clone());
-                values.push(to_push);
+                values.push(bytes.clone());
             } else {
                 return ResponseValue::Error("ERR pushed values must be bulk strings".to_string());
             }
@@ -153,11 +151,11 @@ impl CommandHandler {
         match self.kv.lpop(&key, count) {
             Ok(bytes_vec) => {
                 if bytes_vec.len() == 1 {
-                    ResponseValue::BulkString(Some(bytes_vec[0].to_vec()))
+                    ResponseValue::BulkString(Some(bytes_vec[0].clone()))
                 } else {
                     let response_elements: Vec<ResponseValue> = bytes_vec
                         .into_iter()
-                        .map(|b| ResponseValue::BulkString(Some(b.to_vec())))
+                        .map(|b| ResponseValue::BulkString(Some(b)))
                         .collect();
                     ResponseValue::Array(Some(response_elements))
                 }
@@ -176,8 +174,7 @@ impl CommandHandler {
         let mut values = Vec::with_capacity(args.len().saturating_sub(1));
         for arg in &args[1..] {
             if let ResponseValue::BulkString(Some(bytes)) = arg {
-                let to_push = Bytes::from(bytes.clone());
-                values.push(to_push);
+                values.push(bytes.clone());
             } else {
                 return ResponseValue::Error("ERR pushed values must be bulk strings".to_string());
             }
@@ -210,11 +207,11 @@ impl CommandHandler {
         match self.kv.rpop(&key, count) {
             Ok(bytes_vec) => {
                 if bytes_vec.len() == 1 {
-                    ResponseValue::BulkString(Some(bytes_vec[0].to_vec()))
+                    ResponseValue::BulkString(Some(bytes_vec[0].clone()))
                 } else {
                     let response_elements: Vec<ResponseValue> = bytes_vec
                         .into_iter()
-                        .map(|b| ResponseValue::BulkString(Some(b.to_vec())))
+                        .map(|b| ResponseValue::BulkString(Some(b)))
                         .collect();
                     ResponseValue::Array(Some(response_elements))
                 }
@@ -250,7 +247,7 @@ impl CommandHandler {
             Ok(bytes_vec) => {
                 let response_elements: Vec<ResponseValue> = bytes_vec
                     .into_iter()
-                    .map(|b| ResponseValue::BulkString(Some(b.to_vec())))
+                    .map(|b| ResponseValue::BulkString(Some(b)))
                     .collect();
 
                 ResponseValue::Array(Some(response_elements))
@@ -269,7 +266,7 @@ impl CommandHandler {
         let mut values = Vec::with_capacity(args.len().saturating_sub(1));
         for arg in &args[1..] {
             if let ResponseValue::BulkString(Some(bytes)) = arg {
-                let to_push = Bytes::from(bytes.clone());
+                let to_push = bytes.clone();
                 values.push(to_push);
             } else {
                 return ResponseValue::Error("ERR pushed values must be bulk strings".to_string());
@@ -301,7 +298,7 @@ impl CommandHandler {
             Ok(bytes_vec) => {
                 let response_vector: Vec<ResponseValue> = bytes_vec
                     .into_iter()
-                    .map(|b| ResponseValue::BulkString(Some(b.to_vec())))
+                    .map(|b| ResponseValue::BulkString(Some(b)))
                     .collect();
                 ResponseValue::Array(Some(response_vector))
             }
@@ -320,7 +317,7 @@ impl CommandHandler {
             Ok(bytes_vec) => {
                 let response_elements: Vec<ResponseValue> = bytes_vec
                     .into_iter()
-                    .map(|b| ResponseValue::BulkString(Some(b.to_vec())))
+                    .map(|b| ResponseValue::BulkString(Some(b)))
                     .collect();
                 ResponseValue::Array(Some(response_elements))
             }

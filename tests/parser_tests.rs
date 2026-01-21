@@ -1,10 +1,10 @@
-use rustis::parser::{BufParseError, Parser, ResponseValue};
+use bytes::BytesMut;
+use rustis::parser::{parse, BufParseError, ResponseValue};
 
 // Helper to reduce boilerplate
 fn parse_buffer(input: &[u8]) -> Result<ResponseValue, BufParseError> {
-    let mut parser = Parser::new(4096);
-    parser.buffer.extend_from_slice(input);
-    parser.parse()
+    let mut buffer = BytesMut::with_capacity(4096);
+    parse(buffer)
 }
 
 // =========================================================================
