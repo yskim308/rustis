@@ -114,6 +114,8 @@ fn parse_inline(buffer: &mut BytesMut) -> Result<ResponseValue, BufParseError> {
         .map(|bytes| ResponseValue::BulkString(Some(Bytes::copy_from_slice(bytes))))
         .collect();
 
+    buffer.advance(header_end + 2);
+
     Ok(ResponseValue::Array(Some(items)))
 }
 
