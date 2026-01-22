@@ -177,12 +177,19 @@ fn parse_bulk_string(buffer: &mut BytesMut) -> Result<ResponseValue, BufParseErr
     let len = integer_len as usize;
     let total_length = header_end + 2 + len + 2;
     if buffer.len() < total_length {
-        return Ok(ResponseValue::BulkString(None));
+        return Err(BufParseError::Incomplete);
     }
 
     buffer.advance(header_end + 2);
 
     let data = buffer.split_to(len).freeze();
+
+    if buffer[0] != b'\r' || buffer[1] != b'\n' {
+        return Err(BufParseError::UnexpectedByte {
+            expected: b'\r',
+            found: Some(buffer[0]),
+        });
+    }
 
     buffer.advance(2);
 
