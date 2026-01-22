@@ -106,7 +106,7 @@ fn parse_inline(buffer: &mut BytesMut) -> Result<ResponseValue, BufParseError> {
 
     let parts: Vec<&[u8]> = val_slice
         .split(|b| b.is_ascii_whitespace())
-        .filter(|chunk| chunk.is_empty())
+        .filter(|chunk| !chunk.is_empty())
         .collect();
 
     let items = parts
