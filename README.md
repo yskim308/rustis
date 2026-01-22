@@ -66,6 +66,45 @@ Currently the following commands are supported:
 
 ---
 
+## single_thread_v3
+
+1. conditional compaction of Bytes, use references if payload is large
+
+2. increase read and write buffer size, avoid thrashing from malloc 
+
+### single_thread_v3 vs single_thread_v2
+
+
+| Test Name | Cmd | RPS | Δ RPS | Latency (ms) | Δ Lat |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| High Concurrency & Throughput (Mixed) | SET | 1,225,490 | 🟢 +0.12% | 43.839 | 🟢 -5.39% |
+| High Concurrency & Throughput (Mixed) | GET | 2,450,980 | 🟢 +12.50% | 23.023 | 🟢 -8.69% |
+| High Concurrency & Throughput (Mixed) | LPUSH | 2,242,152 | 🟢 +2.47% | 26.015 | 🟢 -3.67% |
+| High Concurrency & Throughput (Mixed) | LPOP | 2,762,431 | 🟢 +1.10% | 20.671 | 🟢 -2.34% |
+| High Concurrency & Throughput (Mixed) | SADD | 1,890,359 | 🟢 +1.89% | 31.519 | 🟢 -3.57% |
+| High Concurrency & Throughput (Mixed) | SPOP | 1,742,160 | 🟢 +0.87% | 16.639 | 🟢 -2.53% |
+| Heavy Payload Saturation (4KB) | SET | 452,489 | 🟢 +27.69% | 33.855 | 🟢 -21.80% |
+| Heavy Payload Saturation (4KB) | GET | 792,393 | 🟢 +16.80% | 18.175 | 🟢 -8.24% |
+
+
+### single_thread_v3 vs redis baseline
+
+
+| Test Name | Cmd | RPS | Δ RPS | Latency (ms) | Δ Lat |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| High Concurrency & Throughput (Mixed) | SET | 1,225,490 | 🟢 +38.73% | 43.839 | 🟢 -42.58% |
+| High Concurrency & Throughput (Mixed) | GET | 2,450,980 | 🔴 -14.46% | 23.023 | 🔴 +26.12% |
+| High Concurrency & Throughput (Mixed) | LPUSH | 2,242,152 | 🔴 -13.00% | 26.015 | 🔴 +23.00% |
+| High Concurrency & Throughput (Mixed) | LPOP | 2,762,431 | 🟢 +13.54% | 20.671 | 🟢 -9.27% |
+| High Concurrency & Throughput (Mixed) | SADD | 1,890,359 | 🔴 -27.60% | 31.519 | 🔴 +54.15% |
+| High Concurrency & Throughput (Mixed) | SPOP | 1,742,160 | 🔴 -45.99% | 16.639 | 🔴 +25.76% |
+| Heavy Payload Saturation (4KB) | SET | 452,489 | 🔴 -7.24% | 33.855 | 🔴 +248.05% |
+| Heavy Payload Saturation (4KB) | GET | 792,393 | 🟢 +31.22% | 18.175 | 🟢 -12.82% |
+
+---
+
+# Benchmarks for Previous Versions
+
 ## single_thread_v2
 
 1. remove atomic reference counting in hash map
@@ -111,8 +150,6 @@ Currently the following commands are supported:
 | Heavy Payload Saturation (4KB) | GET | 678,426 | 🟢 +12.35% | 19.807 | 🟢 -4.99% |
 
 ---
-
-# Benchmarks for Previous Versions
 
 ## single_thread_v1
 

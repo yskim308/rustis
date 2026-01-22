@@ -44,7 +44,7 @@ fn resolve_range(start: i64, stop: i64, len: usize) -> (usize, usize) {
     (start as usize, stop as usize)
 }
 
-const COMPACTION_THRESHOLD: usize = 8 * 1024;
+const COMPACTION_THRESHOLD: usize = 2 * 1024;
 
 fn compact(b: Bytes) -> Bytes {
     if b.len() < COMPACTION_THRESHOLD {
