@@ -53,6 +53,10 @@ impl KvStore {
 
     pub fn set(&self, key: Bytes, value: Bytes) -> Result<(), DatabaseError> {
         let mut db = self.db.borrow_mut();
+
+        let key = Bytes::copy_from_slice(&key);
+        let value = Bytes::copy_from_slice(&value);
+
         db.insert(key, RedisValue::String(value));
         Ok(())
     }
@@ -64,13 +68,15 @@ impl KvStore {
 
     pub fn lpush(&self, key: Bytes, values: Vec<Bytes>) -> Result<i64, DatabaseError> {
         let mut db = self.db.borrow_mut();
+        let key = Bytes::copy_from_slice(&key);
+
         let entry = db
             .entry(key)
             .or_insert_with(|| RedisValue::List(VecDeque::new()));
         match entry {
             RedisValue::List(list) => {
                 for val in values {
-                    list.push_front(val);
+                    list.push_front(Bytes::copy_from_slice(&val));
                 }
                 Ok(list.len() as i64)
             }
@@ -100,13 +106,15 @@ impl KvStore {
 
     pub fn rpush(&self, key: Bytes, values: Vec<Bytes>) -> Result<i64, DatabaseError> {
         let mut db = self.db.borrow_mut();
+        let key = Bytes::copy_from_slice(&key);
+
         let entry = db
             .entry(key)
             .or_insert_with(|| RedisValue::List(VecDeque::new()));
         match entry {
             RedisValue::List(list) => {
                 for val in values {
-                    list.push_back(val);
+                    list.push_back(Bytes::copy_from_slice(&val));
                 }
                 Ok(list.len() as i64)
             }
@@ -167,6 +175,9 @@ impl KvStore {
 
     pub fn sadd(&self, key: Bytes, values: Vec<Bytes>) -> Result<i64, DatabaseError> {
         let mut db = self.db.borrow_mut();
+
+        let key = Bytes::copy_from_slice(&key);
+
         let entry = db
             .entry(key)
             .or_insert_with(|| RedisValue::Set(HashSet::new()));
@@ -175,7 +186,7 @@ impl KvStore {
             RedisValue::Set(set) => {
                 let mut count = 0;
                 for val in values {
-                    if set.insert(val) {
+                    if set.insert(Bytes::copy_from_slice(&val)) {
                         count += 1
                     };
                 }
