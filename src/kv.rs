@@ -19,7 +19,7 @@ pub enum RedisValue {
 #[derive(Clone, Debug)]
 pub struct KvStore {
     // We use Bytes because it's cheap to clone (reference counted)
-    db: Rc<RefCell<HashMap<String, RedisValue>>>,
+    db: Rc<RefCell<HashMap<Bytes, RedisValue>>>,
 }
 
 impl Default for KvStore {
@@ -51,27 +51,18 @@ impl KvStore {
         }
     }
 
-    /// Sets a value in the store.
-    pub fn set(&self, key: String, value: Bytes) -> Result<(), DatabaseError> {
+    pub fn set(&self, key: Bytes, value: Bytes) -> Result<(), DatabaseError> {
         let mut db = self.db.borrow_mut();
         db.insert(key, RedisValue::String(value));
         Ok(())
     }
 
-    /// Gets a value from the store.
-    /// Returns None if the key does not exist.
-    pub fn get(&self, key: &str) -> Result<Option<RedisValue>, DatabaseError> {
+    pub fn get(&self, key: &Bytes) -> Result<Option<RedisValue>, DatabaseError> {
         let db = self.db.borrow();
         Ok(db.get(key).cloned()) // Cloning Bytes is O(1)
     }
 
-    /// Removes a key from the store.
-    pub fn del(&self, key: &str) -> Result<bool, DatabaseError> {
-        let mut db = self.db.borrow_mut();
-        Ok(db.remove(key).is_some())
-    }
-
-    pub fn lpush(&self, key: String, values: Vec<Bytes>) -> Result<i64, DatabaseError> {
+    pub fn lpush(&self, key: Bytes, values: Vec<Bytes>) -> Result<i64, DatabaseError> {
         let mut db = self.db.borrow_mut();
         let entry = db
             .entry(key)
@@ -87,7 +78,7 @@ impl KvStore {
         }
     }
 
-    pub fn lpop(&self, key: &str, count: i64) -> Result<Vec<Bytes>, DatabaseError> {
+    pub fn lpop(&self, key: &Bytes, count: i64) -> Result<Vec<Bytes>, DatabaseError> {
         let mut db = self.db.borrow_mut();
         let (popped_elements, should_remove) = match db.get_mut(key) {
             Some(RedisValue::List(list)) => {
@@ -107,7 +98,7 @@ impl KvStore {
         Ok(popped_elements)
     }
 
-    pub fn rpush(&self, key: String, values: Vec<Bytes>) -> Result<i64, DatabaseError> {
+    pub fn rpush(&self, key: Bytes, values: Vec<Bytes>) -> Result<i64, DatabaseError> {
         let mut db = self.db.borrow_mut();
         let entry = db
             .entry(key)
@@ -123,7 +114,7 @@ impl KvStore {
         }
     }
 
-    pub fn rpop(&self, key: &str, count: i64) -> Result<Vec<Bytes>, DatabaseError> {
+    pub fn rpop(&self, key: &Bytes, count: i64) -> Result<Vec<Bytes>, DatabaseError> {
         let mut db = self.db.borrow_mut();
         let (popped_elements, should_remove) = match db.get_mut(key) {
             Some(RedisValue::List(list)) => {
@@ -143,7 +134,7 @@ impl KvStore {
         Ok(popped_elements)
     }
 
-    pub fn lrange(&self, key: &str, start: i64, stop: i64) -> Result<Vec<Bytes>, DatabaseError> {
+    pub fn lrange(&self, key: &Bytes, start: i64, stop: i64) -> Result<Vec<Bytes>, DatabaseError> {
         let db = self.db.borrow();
 
         let val = match db.get(key) {
@@ -174,7 +165,7 @@ impl KvStore {
         Ok(result)
     }
 
-    pub fn sadd(&self, key: String, values: Vec<Bytes>) -> Result<i64, DatabaseError> {
+    pub fn sadd(&self, key: Bytes, values: Vec<Bytes>) -> Result<i64, DatabaseError> {
         let mut db = self.db.borrow_mut();
         let entry = db
             .entry(key)
@@ -194,7 +185,7 @@ impl KvStore {
         }
     }
 
-    pub fn spop(&self, key: &str, count: i64) -> Result<Vec<Bytes>, DatabaseError> {
+    pub fn spop(&self, key: &Bytes, count: i64) -> Result<Vec<Bytes>, DatabaseError> {
         let mut db = self.db.borrow_mut();
 
         let (popped_elements, should_remove) = match db.get_mut(key) {
@@ -221,7 +212,7 @@ impl KvStore {
         Ok(popped_elements)
     }
 
-    pub fn smembers(&self, key: &str) -> Result<Vec<Bytes>, DatabaseError> {
+    pub fn smembers(&self, key: &Bytes) -> Result<Vec<Bytes>, DatabaseError> {
         let db = self.db.borrow();
 
         match db.get(key) {
