@@ -1,6 +1,7 @@
 use bytes::Bytes;
+use std::cell::RefCell;
 use std::collections::{HashMap, HashSet, VecDeque};
-use std::sync::{Arc, RwLock};
+use std::rc::Rc;
 
 #[derive(Debug)]
 pub enum DatabaseError {
@@ -14,12 +15,11 @@ pub enum RedisValue {
     List(VecDeque<Bytes>),
     Set(HashSet<Bytes>),
 }
-/// We use Arc to share it across connection tasks and RwLock to allow
-/// concurrent reads but exclusive writes.
+
 #[derive(Clone, Debug)]
 pub struct KvStore {
     // We use Bytes because it's cheap to clone (reference counted)
-    db: Arc<RwLock<HashMap<String, RedisValue>>>,
+    db: Rc<RefCell<HashMap<String, RedisValue>>>,
 }
 
 impl Default for KvStore {
@@ -47,13 +47,13 @@ fn resolve_range(start: i64, stop: i64, len: usize) -> (usize, usize) {
 impl KvStore {
     pub fn new() -> Self {
         Self {
-            db: Arc::new(RwLock::new(HashMap::new())),
+            db: Rc::new(RefCell::new(HashMap::new())),
         }
     }
 
     /// Sets a value in the store.
     pub fn set(&self, key: String, value: Bytes) -> Result<(), DatabaseError> {
-        let mut db = self.db.write().map_err(|_| DatabaseError::PoisonedLock)?;
+        let mut db = self.db.borrow_mut();
         db.insert(key, RedisValue::String(value));
         Ok(())
     }
@@ -61,18 +61,18 @@ impl KvStore {
     /// Gets a value from the store.
     /// Returns None if the key does not exist.
     pub fn get(&self, key: &str) -> Result<Option<RedisValue>, DatabaseError> {
-        let db = self.db.read().map_err(|_| DatabaseError::PoisonedLock)?;
+        let db = self.db.borrow();
         Ok(db.get(key).cloned()) // Cloning Bytes is O(1)
     }
 
     /// Removes a key from the store.
     pub fn del(&self, key: &str) -> Result<bool, DatabaseError> {
-        let mut db = self.db.write().map_err(|_| DatabaseError::PoisonedLock)?;
+        let mut db = self.db.borrow_mut();
         Ok(db.remove(key).is_some())
     }
 
     pub fn lpush(&self, key: String, values: Vec<Bytes>) -> Result<i64, DatabaseError> {
-        let mut db = self.db.write().map_err(|_| DatabaseError::PoisonedLock)?;
+        let mut db = self.db.borrow_mut();
         let entry = db
             .entry(key)
             .or_insert_with(|| RedisValue::List(VecDeque::new()));
@@ -88,7 +88,7 @@ impl KvStore {
     }
 
     pub fn lpop(&self, key: &str, count: i64) -> Result<Vec<Bytes>, DatabaseError> {
-        let mut db = self.db.write().map_err(|_| DatabaseError::PoisonedLock)?;
+        let mut db = self.db.borrow_mut();
         let (popped_elements, should_remove) = match db.get_mut(key) {
             Some(RedisValue::List(list)) => {
                 let length = list.len();
@@ -108,7 +108,7 @@ impl KvStore {
     }
 
     pub fn rpush(&self, key: String, values: Vec<Bytes>) -> Result<i64, DatabaseError> {
-        let mut db = self.db.write().map_err(|_| DatabaseError::PoisonedLock)?;
+        let mut db = self.db.borrow_mut();
         let entry = db
             .entry(key)
             .or_insert_with(|| RedisValue::List(VecDeque::new()));
@@ -124,7 +124,7 @@ impl KvStore {
     }
 
     pub fn rpop(&self, key: &str, count: i64) -> Result<Vec<Bytes>, DatabaseError> {
-        let mut db = self.db.write().map_err(|_| DatabaseError::PoisonedLock)?;
+        let mut db = self.db.borrow_mut();
         let (popped_elements, should_remove) = match db.get_mut(key) {
             Some(RedisValue::List(list)) => {
                 let length = list.len();
@@ -144,7 +144,7 @@ impl KvStore {
     }
 
     pub fn lrange(&self, key: &str, start: i64, stop: i64) -> Result<Vec<Bytes>, DatabaseError> {
-        let db = self.db.read().map_err(|_| DatabaseError::PoisonedLock)?;
+        let db = self.db.borrow();
 
         let val = match db.get(key) {
             Some(RedisValue::List(list)) => list,
@@ -175,7 +175,7 @@ impl KvStore {
     }
 
     pub fn sadd(&self, key: String, values: Vec<Bytes>) -> Result<i64, DatabaseError> {
-        let mut db = self.db.write().map_err(|_| DatabaseError::PoisonedLock)?;
+        let mut db = self.db.borrow_mut();
         let entry = db
             .entry(key)
             .or_insert_with(|| RedisValue::Set(HashSet::new()));
@@ -195,7 +195,7 @@ impl KvStore {
     }
 
     pub fn spop(&self, key: &str, count: i64) -> Result<Vec<Bytes>, DatabaseError> {
-        let mut db = self.db.write().map_err(|_| DatabaseError::PoisonedLock)?;
+        let mut db = self.db.borrow_mut();
 
         let (popped_elements, should_remove) = match db.get_mut(key) {
             Some(RedisValue::Set(set)) => {
@@ -222,7 +222,7 @@ impl KvStore {
     }
 
     pub fn smembers(&self, key: &str) -> Result<Vec<Bytes>, DatabaseError> {
-        let db = self.db.read().map_err(|_| DatabaseError::PoisonedLock)?;
+        let db = self.db.borrow();
 
         match db.get(key) {
             Some(RedisValue::Set(set)) => {

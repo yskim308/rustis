@@ -1,5 +1,5 @@
 use std::env;
-use std::sync::Arc;
+use tokio::task;
 
 use bytes::BytesMut;
 use rustis::handler::CommandHandler;
@@ -20,23 +20,32 @@ async fn main() -> tokio::io::Result<()> {
     let listener = TcpListener::bind(&addr).await?;
     println!("Listening on port {port}");
 
-    let kv = Arc::new(KvStore::new());
-    loop {
-        let (stream, _) = listener.accept().await?;
+    let kv = KvStore::new();
 
-        let kv_clone = kv.clone();
-        tokio::spawn(async move {
-            if let Err(e) = handle_connection(stream, kv_clone).await {
-                match e.kind() {
-                    std::io::ErrorKind::ConnectionReset => {}
-                    _ => eprintln!("Error handling connection: {:?}", e),
-                }
+    let local = task::LocalSet::new();
+
+    local
+        .run_until(async move {
+            loop {
+                // todo: handle unwrap
+                let (stream, _) = listener.accept().await.unwrap();
+
+                let kv_clone = kv.clone();
+                tokio::task::spawn_local(async move {
+                    if let Err(e) = handle_connection(stream, kv_clone).await {
+                        match e.kind() {
+                            std::io::ErrorKind::ConnectionReset => {}
+                            _ => eprintln!("Error handling connection: {:?}", e),
+                        }
+                    }
+                });
             }
-        });
-    }
+        })
+        .await;
+    Ok(())
 }
 
-async fn handle_connection(mut stream: TcpStream, kv: Arc<KvStore>) -> tokio::io::Result<()> {
+async fn handle_connection(mut stream: TcpStream, kv: KvStore) -> tokio::io::Result<()> {
     let mut read_buffer = BytesMut::with_capacity(4096);
     let mut write_buffer = BytesMut::with_capacity(4096);
     let handler = CommandHandler::new(kv.clone());

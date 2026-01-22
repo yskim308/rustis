@@ -1,10 +1,8 @@
-use std::sync::Arc;
-
 use crate::kv::{KvStore, RedisValue};
 use crate::parser::ResponseValue;
 
 pub struct CommandHandler {
-    kv: Arc<KvStore>,
+    kv: KvStore,
 }
 
 fn parse_int(value: &ResponseValue) -> Result<i64, String> {
@@ -20,7 +18,7 @@ fn parse_int(value: &ResponseValue) -> Result<i64, String> {
 }
 
 impl CommandHandler {
-    pub fn new(kv: Arc<KvStore>) -> Self {
+    pub fn new(kv: KvStore) -> Self {
         CommandHandler { kv }
     }
 
