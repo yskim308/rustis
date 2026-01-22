@@ -66,7 +66,7 @@ Currently the following commands are supported:
 
 ---
 
-## Second Optimization (single_thread_v2)
+## single_thread_v2
 
 1. remove atomic reference counting in hash map
 
@@ -112,7 +112,9 @@ Currently the following commands are supported:
 
 ---
 
-## First Optimization (single_thread_v1)
+# Benchmarks for Previous Versions
+
+## single_thread_v1
 
 1. Move from `vec<u8>` to `Bytes`, zero copy allocations
 
