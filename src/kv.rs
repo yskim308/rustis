@@ -44,6 +44,16 @@ fn resolve_range(start: i64, stop: i64, len: usize) -> (usize, usize) {
     (start as usize, stop as usize)
 }
 
+const COMPACTION_THRESHOLD: usize = 1024;
+
+fn compact(b: Bytes) -> Bytes {
+    if b.len() < COMPACTION_THRESHOLD {
+        Bytes::copy_from_slice(&b)
+    } else {
+        b
+    }
+}
+
 impl KvStore {
     pub fn new() -> Self {
         Self {
@@ -54,10 +64,7 @@ impl KvStore {
     pub fn set(&self, key: Bytes, value: Bytes) -> Result<(), DatabaseError> {
         let mut db = self.db.borrow_mut();
 
-        let key = Bytes::copy_from_slice(&key);
-        let value = Bytes::copy_from_slice(&value);
-
-        db.insert(key, RedisValue::String(value));
+        db.insert(compact(key), RedisValue::String(compact(value)));
         Ok(())
     }
 
@@ -68,15 +75,14 @@ impl KvStore {
 
     pub fn lpush(&self, key: Bytes, values: Vec<Bytes>) -> Result<i64, DatabaseError> {
         let mut db = self.db.borrow_mut();
-        let key = Bytes::copy_from_slice(&key);
 
         let entry = db
-            .entry(key)
+            .entry(compact(key))
             .or_insert_with(|| RedisValue::List(VecDeque::new()));
         match entry {
             RedisValue::List(list) => {
                 for val in values {
-                    list.push_front(Bytes::copy_from_slice(&val));
+                    list.push_front(compact(val));
                 }
                 Ok(list.len() as i64)
             }
@@ -106,15 +112,14 @@ impl KvStore {
 
     pub fn rpush(&self, key: Bytes, values: Vec<Bytes>) -> Result<i64, DatabaseError> {
         let mut db = self.db.borrow_mut();
-        let key = Bytes::copy_from_slice(&key);
 
         let entry = db
-            .entry(key)
+            .entry(compact(key))
             .or_insert_with(|| RedisValue::List(VecDeque::new()));
         match entry {
             RedisValue::List(list) => {
                 for val in values {
-                    list.push_back(Bytes::copy_from_slice(&val));
+                    list.push_back(compact(val));
                 }
                 Ok(list.len() as i64)
             }
@@ -176,17 +181,15 @@ impl KvStore {
     pub fn sadd(&self, key: Bytes, values: Vec<Bytes>) -> Result<i64, DatabaseError> {
         let mut db = self.db.borrow_mut();
 
-        let key = Bytes::copy_from_slice(&key);
-
         let entry = db
-            .entry(key)
+            .entry(compact(key))
             .or_insert_with(|| RedisValue::Set(HashSet::new()));
 
         match entry {
             RedisValue::Set(set) => {
                 let mut count = 0;
                 for val in values {
-                    if set.insert(Bytes::copy_from_slice(&val)) {
+                    if set.insert(compact(val)) {
                         count += 1
                     };
                 }
