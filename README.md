@@ -55,8 +55,6 @@ Currently the following commands are supported:
 
 |Test Name                            |Command|RPS       |Latency (p50)|
 |-------------------------------------|-------|----------|-------------|
-|Quick Sanity Check                   |INLINE |124999.99 |0.207        |
-|Quick Sanity Check                   |MBULK  |83333.34  |0.543        |
 |Regular Load (Baseline)              |SET    |236686.38 |0.111        |
 |Regular Load (Baseline)              |GET    |245700.25 |0.111        |
 |High Concurrency & Throughput (Mixed)|SET    |874890.62 |76.351       |
@@ -68,7 +66,53 @@ Currently the following commands are supported:
 
 ---
 
-## First Optimization (single_threaded_v1)
+## Second Optimization (single_thread_v2)
+
+1. remove atomic reference counting in hash map
+
+    - to do this, turn hash map to simple reference counted cell
+
+    - main loop now runs with Tokio's LocalSet, gauranteeing no sharing between threads
+
+2. Use Bytes instead of owned Keys in hash map 
+
+3. Compact Bytes values to avoid the heap from holding onto buffer space 
+
+### single_thread_v2 vs single_thread_v1
+
+
+| Test Name | Cmd | RPS | Δ RPS | Latency (ms) | Δ Lat |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| Regular Load (Baseline) | SET | 234,742 | 🔴 -0.70% | 0.111 | 🟢 0.00% |
+| Regular Load (Baseline) | GET | 243,309 | 🔴 -0.12% | 0.111 | 🟢 0.00% |
+| High Concurrency & Throughput (Mixed) | SET | 1,223,990 | 🟢 +20.81% | 46.335 | 🟢 -20.00% |
+| High Concurrency & Throughput (Mixed) | GET | 2,178,649 | 🟢 +12.85% | 25.215 | 🟢 -9.37% |
+| High Concurrency & Throughput (Mixed) | LPUSH | 2,188,184 | 🔴 -9.63% | 27.007 | 🔴 +12.16% |
+| High Concurrency & Throughput (Mixed) | LPOP | 2,732,240 | 🟢 +3.01% | 21.167 | 🟢 -4.48% |
+| High Concurrency & Throughput (Mixed) | SADD | 1,855,288 | 🔴 -2.41% | 32.687 | 🔴 +3.39% |
+| High Concurrency & Throughput (Mixed) | SPOP | 1,727,116 | 🟢 +0.52% | 17.071 | 🟢 -3.61% |
+| Heavy Payload Saturation (4KB) | SET | 354,359 | 🔴 -0.14% | 43.295 | 🟢 -0.07% |
+| Heavy Payload Saturation (4KB) | GET | 678,426 | 🔴 -11.13% | 19.807 | 🔴 +6.72% |
+
+### single_thread_v2 vs base redis
+
+
+| Test Name | Cmd | RPS | Δ RPS | Latency (ms) | Δ Lat |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| Regular Load (Baseline) | SET | 234,742 | 🔴 -2.00% | 0.111 | 🟢 0.00% |
+| Regular Load (Baseline) | GET | 243,309 | 🔴 -0.61% | 0.111 | 🟢 0.00% |
+| High Concurrency & Throughput (Mixed) | SET | 1,223,990 | 🟢 +38.56% | 46.335 | 🟢 -39.31% |
+| High Concurrency & Throughput (Mixed) | GET | 2,178,649 | 🔴 -23.97% | 25.215 | 🔴 +38.13% |
+| High Concurrency & Throughput (Mixed) | LPUSH | 2,188,184 | 🔴 -15.10% | 27.007 | 🔴 +27.69% |
+| High Concurrency & Throughput (Mixed) | LPOP | 2,732,240 | 🟢 +12.30% | 21.167 | 🟢 -7.09% |
+| High Concurrency & Throughput (Mixed) | SADD | 1,855,288 | 🔴 -28.94% | 32.687 | 🔴 +59.86% |
+| High Concurrency & Throughput (Mixed) | SPOP | 1,727,116 | 🔴 -46.46% | 17.071 | 🔴 +29.02% |
+| Heavy Payload Saturation (4KB) | SET | 354,359 | 🔴 -27.36% | 43.295 | 🔴 +345.10% |
+| Heavy Payload Saturation (4KB) | GET | 678,426 | 🟢 +12.35% | 19.807 | 🟢 -4.99% |
+
+---
+
+## First Optimization (single_thread_v1)
 
 1. Move from `vec<u8>` to `Bytes`, zero copy allocations
 
@@ -83,8 +127,6 @@ Currently the following commands are supported:
 
 | Test Name | Cmd | RPS | Δ RPS | Latency (ms) | Δ Lat |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| Quick Sanity Check | INLINE | 125,000 | 🟢 +62.50% | 0.199 | 🟢 -66.33% |
-| Quick Sanity Check | MBULK | 90,909 | 🟢 0.00% | 0.415 | 🟢 -29.78% |
 | Regular Load (Baseline) | SET | 236,407 | 🟢 +45.27% | 0.111 | 🟢 -63.37% |
 | Regular Load (Baseline) | GET | 243,605 | 🟢 +33.13% | 0.111 | 🟢 -59.04% |
 | High Concurrency & Throughput (Mixed) | SET | 1,013,171 | 🟢 +240.22% | 57.919 | 🟢 -72.31% |
@@ -102,8 +144,6 @@ Currently the following commands are supported:
 
 | Test Name | Cmd | RPS | Δ RPS | Latency (ms) | Δ Lat |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| Quick Sanity Check | INLINE | 125,000 | 🔴 -12.50% | 0.199 | 🔴 +4.19% |
-| Quick Sanity Check | MBULK | 90,909 | 🟢 +9.09% | 0.415 | 🟢 -34.23% |
 | Regular Load (Baseline) | SET | 236,407 | 🔴 -1.30% | 0.111 | 🟢 0.00% |
 | Regular Load (Baseline) | GET | 243,605 | 🔴 -0.49% | 0.111 | 🟢 0.00% |
 | High Concurrency & Throughput (Mixed) | SET | 1,013,171 | 🟢 +14.69% | 57.919 | 🟢 -24.14% |
@@ -123,8 +163,6 @@ first iteration baseline vs the official redis-server
 
 | Test Name | Cmd | RPS | Δ RPS | Latency (ms) | Δ Lat |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| Quick Sanity Check | INLINE | 76,923 | 🔴 -46.15% | 0.591 | 🔴 +209.42% |
-| Quick Sanity Check | MBULK | 90,909 | 🟢 +9.09% | 0.591 | 🟢 -6.34% |
 | Regular Load (Baseline) | SET | 162,734 | 🔴 -32.06% | 0.303 | 🔴 +172.97% |
 | Regular Load (Baseline) | GET | 182,983 | 🔴 -25.25% | 0.271 | 🔴 +144.14% |
 | High Concurrency & Throughput (Mixed) | SET | 297,796 | 🔴 -66.29% | 209.151 | 🔴 +173.93% |

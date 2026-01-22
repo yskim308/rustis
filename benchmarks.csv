@@ -35,3 +35,15 @@ Timestamp,Git Hash,Note,Test Name,Command,RPS,Latency (p50)
 2026-01-22 15:37:59,370c1e7,single_thread_v1,High Concurrency & Throughput (Mixed),SPOP,1718213.00,17.711
 2026-01-22 15:38:04,370c1e7,single_thread_v1,Heavy Payload Saturation (4KB),SET,354861.59,43.327
 2026-01-22 15:38:04,370c1e7,single_thread_v1,Heavy Payload Saturation (4KB),GET,763358.81,18.559
+2026-01-22 19:52:38,d27051a,single_thread_v2,Quick Sanity Check,INLINE,124999.99,0.199
+2026-01-22 19:52:38,d27051a,single_thread_v2,Quick Sanity Check,MBULK,71428.57,0.703
+2026-01-22 19:52:41,d27051a,single_thread_v2,Regular Load (Baseline),SET,234741.78,0.111
+2026-01-22 19:52:41,d27051a,single_thread_v2,Regular Load (Baseline),GET,243309.00,0.111
+2026-01-22 19:52:55,d27051a,single_thread_v2,High Concurrency & Throughput (Mixed),SET,1223990.25,46.335
+2026-01-22 19:52:55,d27051a,single_thread_v2,High Concurrency & Throughput (Mixed),GET,2178649.25,25.215
+2026-01-22 19:52:55,d27051a,single_thread_v2,High Concurrency & Throughput (Mixed),LPUSH,2188183.75,27.007
+2026-01-22 19:52:55,d27051a,single_thread_v2,High Concurrency & Throughput (Mixed),LPOP,2732240.50,21.167
+2026-01-22 19:52:55,d27051a,single_thread_v2,High Concurrency & Throughput (Mixed),SADD,1855287.62,32.687
+2026-01-22 19:52:55,d27051a,single_thread_v2,High Concurrency & Throughput (Mixed),SPOP,1727115.75,17.071
+2026-01-22 19:53:00,d27051a,single_thread_v2,Heavy Payload Saturation (4KB),SET,354358.59,43.295
+2026-01-22 19:53:00,d27051a,single_thread_v2,Heavy Payload Saturation (4KB),GET,678426.06,19.807
