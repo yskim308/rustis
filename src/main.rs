@@ -1,9 +1,10 @@
 use std::env;
 use std::sync::Arc;
 
+use bytes::BytesMut;
 use rustis::handler::CommandHandler;
 use rustis::kv::KvStore;
-use rustis::parser::{BufParseError, Parser};
+use rustis::parser::{parse, BufParseError};
 
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
@@ -36,20 +37,21 @@ async fn main() -> tokio::io::Result<()> {
 }
 
 async fn handle_connection(mut stream: TcpStream, kv: Arc<KvStore>) -> tokio::io::Result<()> {
-    let mut parser = Parser::new(4096);
+    let mut read_buffer = BytesMut::with_capacity(4096);
+    let mut write_buffer = BytesMut::with_capacity(4096);
     let handler = CommandHandler::new(kv.clone());
     loop {
-        let bytes_read = stream.read_buf(&mut parser.buffer).await?;
+        let bytes_read = stream.read_buf(&mut read_buffer).await?;
 
         if bytes_read == 0 {
             return Ok(()); // Connection closed
         }
 
         loop {
-            match parser.parse() {
+            match parse(&mut read_buffer) {
                 Ok(value) => {
                     let response = handler.process_command(value);
-                    stream.write_all(&response.serialize()).await?;
+                    response.serialize(&mut write_buffer);
                 }
                 Err(BufParseError::Incomplete) => {
                     // Not enough data yet, continue reading from the socket
@@ -73,6 +75,9 @@ async fn handle_connection(mut stream: TcpStream, kv: Arc<KvStore>) -> tokio::io
             }
         }
 
-        parser.compact();
+        if !write_buffer.is_empty() {
+            stream.write_all(&write_buffer).await?;
+            write_buffer.clear();
+        }
     }
 }

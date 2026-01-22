@@ -1,8 +1,7 @@
-use std::{num::ParseIntError, string::FromUtf8Error};
+use std::num::ParseIntError;
 
-use bytes::{Buf, Bytes, BytesMut};
+use bytes::{Buf, BufMut, Bytes, BytesMut};
 use memchr::memmem;
-
 #[derive(Debug, PartialEq, Clone)]
 pub enum ResponseValue {
     SimpleString(String),
@@ -13,28 +12,47 @@ pub enum ResponseValue {
 }
 
 impl ResponseValue {
-    pub fn serialize(&self) -> Vec<u8> {
+    // Goal 3: When serializing, write directly to the buffer (Zero allocation)
+    pub fn serialize(&self, dst: &mut BytesMut) {
         match self {
-            ResponseValue::SimpleString(s) => format!("+{}\r\n", s).into_bytes(),
-            ResponseValue::Error(msg) => format!("-{}\r\n", msg).into_bytes(),
-            ResponseValue::Integer(i) => format!(":{}\r\n", i).into_bytes(),
-            ResponseValue::BulkString(None) => b"$-1\r\n".to_vec(),
+            ResponseValue::SimpleString(s) => {
+                dst.put_u8(b'+');
+                dst.put_slice(s.as_bytes());
+                dst.put_slice(b"\r\n");
+            }
+            ResponseValue::Error(msg) => {
+                dst.put_u8(b'-');
+                dst.put_slice(msg.as_bytes());
+                dst.put_slice(b"\r\n");
+            }
+            ResponseValue::Integer(i) => {
+                dst.put_u8(b':');
+                // Use a stack buffer to avoid allocation for itoa
+                let val_str = i.to_string();
+                dst.put_slice(val_str.as_bytes());
+                dst.put_slice(b"\r\n");
+            }
+            ResponseValue::BulkString(None) => {
+                dst.put_slice(b"$-1\r\n");
+            }
             ResponseValue::BulkString(Some(data)) => {
-                let mut bytes = Vec::new();
-                bytes.extend_from_slice(format!("${}\r\n", data.len()).as_bytes());
-                bytes.extend_from_slice(data);
-                bytes.extend_from_slice(b"\r\n");
-                bytes
+                dst.put_u8(b'$');
+                dst.put_slice(data.len().to_string().as_bytes());
+                dst.put_slice(b"\r\n");
+                dst.put_slice(data); // O(N) copy, but unavoidable for network write
+                dst.put_slice(b"\r\n");
+            }
+            ResponseValue::Array(None) => {
+                dst.put_slice(b"*-1\r\n");
             }
             ResponseValue::Array(Some(items)) => {
-                let mut bytes = Vec::new();
-                bytes.extend_from_slice(format!("*{}\r\n", items.len()).as_bytes());
+                dst.put_u8(b'*');
+                dst.put_slice(items.len().to_string().as_bytes());
+                dst.put_slice(b"\r\n");
                 for item in items {
-                    bytes.extend(item.serialize());
+                    item.serialize(dst);
                 }
-                bytes
             }
-            ResponseValue::Array(None) => b"*-1\r\n".to_vec(),
         }
     }
 }
@@ -73,18 +91,18 @@ fn expect_byte(found: u8, expected: u8) -> Result<(), BufParseError> {
 }
 
 fn read_line(buffer: &BytesMut) -> Option<usize> {
-    memmem::find(&buffer, b"\r\n")
+    memmem::find(buffer, b"\r\n")
 }
 
 pub fn parse(buffer: &mut BytesMut) -> Result<ResponseValue, BufParseError> {
-    match buffer.get(0) {
+    match buffer.first() {
         Some(b'+') => parse_simple_string(buffer),
         Some(b'-') => parse_simple_error(buffer),
         Some(b':') => parse_integer(buffer),
         Some(b'$') => parse_bulk_string(buffer),
         Some(b'*') => parse_array(buffer),
         Some(byte) if byte.is_ascii_alphabetic() => parse_inline(buffer),
-        Some(byte) => Err(BufParseError::InvalidFirstByte(Some(byte.clone()))),
+        Some(byte) => Err(BufParseError::InvalidFirstByte(Some(*byte))),
         None => Err(BufParseError::Incomplete),
     }
 }
