@@ -1,5 +1,6 @@
 #[cfg(test)]
 mod tests {
+    use bytes::Bytes;
     use rustis::handler::CommandHandler;
     use rustis::kv::KvStore;
     use rustis::parser::ResponseValue;
@@ -9,7 +10,7 @@ mod tests {
     fn make_cmd(args: Vec<&str>) -> ResponseValue {
         let items = args
             .into_iter()
-            .map(|s| ResponseValue::BulkString(Some(s.as_bytes().to_vec())))
+            .map(|s| ResponseValue::BulkString(Some(Bytes::copy_from_slice(s.as_bytes()))))
             .collect();
         ResponseValue::Array(Some(items))
     }
@@ -18,7 +19,7 @@ mod tests {
     fn extract_str(val: ResponseValue) -> String {
         match val {
             ResponseValue::SimpleString(s) => s,
-            ResponseValue::BulkString(Some(b)) => String::from_utf8(b).unwrap(),
+            ResponseValue::BulkString(Some(b)) => String::from_utf8(b.to_vec()).unwrap(),
             ResponseValue::Error(s) => s,
             _ => panic!("Unexpected type for extraction: {:?}", val),
         }
