@@ -4,7 +4,6 @@ mod tests {
     use rustis::handler::CommandHandler;
     use rustis::kv::KvStore;
     use rustis::parser::ResponseValue;
-    use std::sync::Arc;
 
     // Helper to construct a command request (Array of BulkStrings)
     fn make_cmd(args: Vec<&str>) -> ResponseValue {
@@ -26,7 +25,7 @@ mod tests {
     }
 
     fn setup() -> CommandHandler {
-        let kv = Arc::new(KvStore::new());
+        let kv = KvStore::new();
         CommandHandler::new(kv)
     }
 
