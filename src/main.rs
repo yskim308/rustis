@@ -46,8 +46,8 @@ async fn main() -> tokio::io::Result<()> {
 }
 
 async fn handle_connection(mut stream: TcpStream, kv: KvStore) -> tokio::io::Result<()> {
-    let mut read_buffer = BytesMut::with_capacity(4096);
-    let mut write_buffer = BytesMut::with_capacity(4096);
+    let mut read_buffer = BytesMut::with_capacity(16 * 1024);
+    let mut write_buffer = BytesMut::with_capacity(16 * 1024);
     let handler = CommandHandler::new(kv.clone());
     loop {
         let bytes_read = stream.read_buf(&mut read_buffer).await?;
