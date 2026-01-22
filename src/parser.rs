@@ -79,17 +79,6 @@ impl From<std::num::ParseIntError> for BufParseError {
     }
 }
 
-fn expect_byte(found: u8, expected: u8) -> Result<(), BufParseError> {
-    if found != expected {
-        return Err(BufParseError::UnexpectedByte {
-            expected,
-            found: Some(found),
-        });
-    }
-
-    Ok(())
-}
-
 fn read_line(buffer: &BytesMut) -> Option<usize> {
     memmem::find(buffer, b"\r\n")
 }
