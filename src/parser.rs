@@ -2,6 +2,7 @@ use std::num::ParseIntError;
 
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 use memchr::memmem;
+
 #[derive(Debug, PartialEq, Clone)]
 pub enum ResponseValue {
     SimpleString(String),
@@ -12,7 +13,6 @@ pub enum ResponseValue {
 }
 
 impl ResponseValue {
-    // Goal 3: When serializing, write directly to the buffer (Zero allocation)
     pub fn serialize(&self, dst: &mut BytesMut) {
         match self {
             ResponseValue::SimpleString(s) => {
@@ -27,7 +27,6 @@ impl ResponseValue {
             }
             ResponseValue::Integer(i) => {
                 dst.put_u8(b':');
-                // Use a stack buffer to avoid allocation for itoa
                 let val_str = i.to_string();
                 dst.put_slice(val_str.as_bytes());
                 dst.put_slice(b"\r\n");
@@ -39,7 +38,7 @@ impl ResponseValue {
                 dst.put_u8(b'$');
                 dst.put_slice(data.len().to_string().as_bytes());
                 dst.put_slice(b"\r\n");
-                dst.put_slice(data); // O(N) copy, but unavoidable for network write
+                dst.put_slice(data);
                 dst.put_slice(b"\r\n");
             }
             ResponseValue::Array(None) => {
@@ -79,30 +78,42 @@ impl From<std::num::ParseIntError> for BufParseError {
     }
 }
 
-fn read_line(buffer: &BytesMut) -> Option<usize> {
-    memmem::find(buffer, b"\r\n")
+fn find_crlf(data: &[u8]) -> Option<usize> {
+    memmem::find(data, b"\r\n")
 }
 
+/// Main public parsing function - atomically parses and advances buffer
 pub fn parse(buffer: &mut BytesMut) -> Result<ResponseValue, BufParseError> {
-    match buffer.first() {
-        Some(b'+') => parse_simple_string(buffer),
-        Some(b'-') => parse_simple_error(buffer),
-        Some(b':') => parse_integer(buffer),
-        Some(b'$') => parse_bulk_string(buffer),
-        Some(b'*') => parse_array(buffer),
-        Some(byte) if byte.is_ascii_alphabetic() => parse_inline(buffer),
+    // Parse from immutable view first
+    let (value, bytes_consumed) = parse_value(&buffer[..])?;
+
+    // Only advance buffer if parsing succeeded
+    buffer.advance(bytes_consumed);
+
+    Ok(value)
+}
+
+/// Internal parser that works on immutable slices
+fn parse_value(data: &[u8]) -> Result<(ResponseValue, usize), BufParseError> {
+    match data.first() {
+        Some(b'+') => parse_simple_string(data),
+        Some(b'-') => parse_simple_error(data),
+        Some(b':') => parse_integer(data),
+        Some(b'$') => parse_bulk_string(data),
+        Some(b'*') => parse_array(data),
+        Some(byte) if byte.is_ascii_alphabetic() => parse_inline(data),
         Some(byte) => Err(BufParseError::InvalidFirstByte(Some(*byte))),
         None => Err(BufParseError::Incomplete),
     }
 }
 
-fn parse_inline(buffer: &mut BytesMut) -> Result<ResponseValue, BufParseError> {
-    let header_end = match read_line(buffer) {
+fn parse_inline(data: &[u8]) -> Result<(ResponseValue, usize), BufParseError> {
+    let header_end = match find_crlf(data) {
         Some(i) => i,
         None => return Err(BufParseError::Incomplete),
     };
 
-    let val_slice = &buffer[..header_end];
+    let val_slice = &data[..header_end];
 
     let parts: Vec<&[u8]> = val_slice
         .split(|b| b.is_ascii_whitespace())
@@ -114,112 +125,120 @@ fn parse_inline(buffer: &mut BytesMut) -> Result<ResponseValue, BufParseError> {
         .map(|bytes| ResponseValue::BulkString(Some(Bytes::copy_from_slice(bytes))))
         .collect();
 
-    buffer.advance(header_end + 2);
+    let bytes_consumed = header_end + 2;
 
-    Ok(ResponseValue::Array(Some(items)))
+    Ok((ResponseValue::Array(Some(items)), bytes_consumed))
 }
 
-fn parse_simple_string(buffer: &mut BytesMut) -> Result<ResponseValue, BufParseError> {
-    let header_end = match read_line(buffer) {
+fn parse_simple_string(data: &[u8]) -> Result<(ResponseValue, usize), BufParseError> {
+    let header_end = match find_crlf(data) {
         Some(i) => i,
         None => return Err(BufParseError::Incomplete),
     };
 
-    let val_slice = &buffer[1..header_end];
-
+    let val_slice = &data[1..header_end];
     let return_string = String::from_utf8_lossy(val_slice).into_owned();
-    buffer.advance(header_end + 2);
+    let bytes_consumed = header_end + 2;
 
-    Ok(ResponseValue::SimpleString(return_string))
+    Ok((ResponseValue::SimpleString(return_string), bytes_consumed))
 }
 
-fn parse_simple_error(buffer: &mut BytesMut) -> Result<ResponseValue, BufParseError> {
-    let header_end = match read_line(buffer) {
+fn parse_simple_error(data: &[u8]) -> Result<(ResponseValue, usize), BufParseError> {
+    let header_end = match find_crlf(data) {
         Some(i) => i,
         None => return Err(BufParseError::Incomplete),
     };
 
-    let val_slice = &buffer[1..header_end];
-
+    let val_slice = &data[1..header_end];
     let return_string = String::from_utf8_lossy(val_slice).into_owned();
-    buffer.advance(header_end + 2);
+    let bytes_consumed = header_end + 2;
 
-    Ok(ResponseValue::Error(return_string))
+    Ok((ResponseValue::Error(return_string), bytes_consumed))
 }
 
-fn parse_integer(buffer: &mut BytesMut) -> Result<ResponseValue, BufParseError> {
-    let header_end = match read_line(buffer) {
+fn parse_integer(data: &[u8]) -> Result<(ResponseValue, usize), BufParseError> {
+    let header_end = match find_crlf(data) {
         Some(i) => i,
         None => return Err(BufParseError::Incomplete),
     };
 
-    let val_slice = &buffer[1..header_end];
-
+    let val_slice = &data[1..header_end];
     let integer_val: i64 = std::str::from_utf8(val_slice)?.parse()?;
+    let bytes_consumed = header_end + 2;
 
-    buffer.advance(header_end + 2);
-
-    Ok(ResponseValue::Integer(integer_val))
+    Ok((ResponseValue::Integer(integer_val), bytes_consumed))
 }
 
-fn parse_bulk_string(buffer: &mut BytesMut) -> Result<ResponseValue, BufParseError> {
-    let header_end = match read_line(buffer) {
+fn parse_bulk_string(data: &[u8]) -> Result<(ResponseValue, usize), BufParseError> {
+    let header_end = match find_crlf(data) {
         Some(i) => i,
         None => return Err(BufParseError::Incomplete),
     };
 
-    let len_slice = &buffer[1..header_end];
+    let len_slice = &data[1..header_end];
     let integer_len: i64 = std::str::from_utf8(len_slice)?.parse()?;
 
+    // Handle null bulk string
     if integer_len < 0 {
-        buffer.advance(header_end + 2);
-        return Ok(ResponseValue::BulkString(None));
+        let bytes_consumed = header_end + 2;
+        return Ok((ResponseValue::BulkString(None), bytes_consumed));
     }
 
     let len = integer_len as usize;
     let total_length = header_end + 2 + len + 2;
-    if buffer.len() < total_length {
+
+    // Check if we have all the data
+    if data.len() < total_length {
         return Err(BufParseError::Incomplete);
     }
 
-    buffer.advance(header_end + 2);
+    // Verify trailing CRLF
+    let data_start = header_end + 2;
+    let data_end = data_start + len;
 
-    let data = buffer.split_to(len).freeze();
-
-    if buffer[0] != b'\r' || buffer[1] != b'\n' {
+    if data[data_end] != b'\r' || data[data_end + 1] != b'\n' {
         return Err(BufParseError::UnexpectedByte {
             expected: b'\r',
-            found: Some(buffer[0]),
+            found: Some(data[data_end]),
         });
     }
 
-    buffer.advance(2);
+    // Extract the actual string data
+    let string_data = Bytes::copy_from_slice(&data[data_start..data_end]);
 
-    Ok(ResponseValue::BulkString(Some(data)))
+    Ok((ResponseValue::BulkString(Some(string_data)), total_length))
 }
 
-fn parse_array(buffer: &mut BytesMut) -> Result<ResponseValue, BufParseError> {
-    let header_end = match read_line(buffer) {
+fn parse_array(data: &[u8]) -> Result<(ResponseValue, usize), BufParseError> {
+    let header_end = match find_crlf(data) {
         Some(i) => i,
         None => return Err(BufParseError::Incomplete),
     };
 
-    let val_slice = &buffer[1..header_end];
-
+    let val_slice = &data[1..header_end];
     let length: i64 = std::str::from_utf8(val_slice)?.parse()?;
 
+    // Handle null array
     if length < 0 {
-        return Ok(ResponseValue::Array(None));
+        let bytes_consumed = header_end + 2;
+        return Ok((ResponseValue::Array(None), bytes_consumed));
     }
 
-    buffer.advance(header_end + 2);
+    let mut offset = header_end + 2;
+    let mut items = Vec::with_capacity(length as usize);
 
-    let mut items = Vec::new();
-
+    // Parse each element in the array
     for _ in 0..length {
-        let value = parse(buffer)?;
+        // Check if we have data left
+        if offset >= data.len() {
+            return Err(BufParseError::Incomplete);
+        }
+
+        // Parse the next value from the remaining data
+        let (value, consumed) = parse_value(&data[offset..])?;
         items.push(value);
+        offset += consumed;
     }
 
-    Ok(ResponseValue::Array(Some(items)))
+    Ok((ResponseValue::Array(Some(items)), offset))
 }
