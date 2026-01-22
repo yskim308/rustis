@@ -3,8 +3,8 @@ use rustis::parser::{parse, BufParseError, ResponseValue};
 
 // Helper to reduce boilerplate
 fn parse_buffer(input: &[u8]) -> Result<ResponseValue, BufParseError> {
-    let mut buffer = BytesMut::with_capacity(4096);
-    parse(buffer)
+    let mut buf = BytesMut::from(input);
+    parse(&mut buf)
 }
 
 // =========================================================================
@@ -115,7 +115,7 @@ fn test_bulk_string_happy_path() {
     let result = parse_buffer(input).unwrap();
 
     match result {
-        ResponseValue::BulkString(Some(bytes)) => assert_eq!(bytes, b"hello"),
+        ResponseValue::BulkString(Some(bytes)) => assert_eq!(bytes.as_ref(), b"hello"),
         _ => panic!("Expected BulkString"),
     }
 }
@@ -167,11 +167,11 @@ fn test_array_happy_path() {
         ResponseValue::Array(Some(items)) => {
             assert_eq!(items.len(), 2);
             match &items[0] {
-                ResponseValue::BulkString(Some(b)) => assert_eq!(b, b"foo"),
+                ResponseValue::BulkString(Some(b)) => assert_eq!(b.as_ref(), b"foo"),
                 _ => panic!("Item 0 should be BulkString"),
             }
             match &items[1] {
-                ResponseValue::BulkString(Some(b)) => assert_eq!(b, b"bar"),
+                ResponseValue::BulkString(Some(b)) => assert_eq!(b.as_ref(), b"bar"),
                 _ => panic!("Item 1 should be BulkString"),
             }
         }
