@@ -7,3 +7,9 @@ edition = "2024"
 bytes = "1.11.0"
 memchr = "2.7.6"
 tokio = { version = "1", features = ["full"] }
+
+[profile.release]
+lto = "fat"             # Link Time Optimization: aggressive cross-crate inlining
+codegen-units = 1       # Compile as one giant unit (slower compile, faster code)
+panic = "abort"         # Crash immediately on panic (removes unwinding overhead)
+strip = true            # Strips symbols (smaller binary, slightly faster load)
