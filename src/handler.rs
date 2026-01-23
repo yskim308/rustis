@@ -19,6 +19,16 @@ fn parse_int(value: &ResponseValue) -> Result<i64, Bytes> {
     }
 }
 
+const COMPACTION_THRESHOLD: usize = 64;
+fn compact(b: &Bytes) -> Bytes {
+    b.clone()
+    // if b.len() <= COMPACTION_THRESHOLD {
+    //     Bytes::copy_from_slice(b)
+    // } else {
+    //     b.clone()
+    // }
+}
+
 impl CommandHandler {
     pub fn new(kv: KvStore) -> Self {
         CommandHandler { kv }
@@ -85,13 +95,13 @@ impl CommandHandler {
         }
 
         let key = match args.first() {
-            Some(ResponseValue::BulkString(Some(bytes))) => Bytes::copy_from_slice(bytes),
+            Some(ResponseValue::BulkString(Some(bytes))) => compact(bytes),
             Some(_) => return ResponseValue::Error("ERR key must be bulk string".into()),
             None => return ResponseValue::Error("ERR invalid number of arguments".into()),
         };
 
         let value = match args.get(1) {
-            Some(ResponseValue::BulkString(Some(bytes))) => Bytes::copy_from_slice(bytes),
+            Some(ResponseValue::BulkString(Some(bytes))) => compact(bytes),
             Some(_) => return ResponseValue::Error("ERR value must be bulk string".into()),
             None => return ResponseValue::Error("ERR invalid number of arguments".into()),
         };
@@ -104,7 +114,7 @@ impl CommandHandler {
 
     fn handle_lpush(&self, args: &[ResponseValue]) -> ResponseValue {
         let key = match args.first() {
-            Some(ResponseValue::BulkString(Some(bytes))) => Bytes::copy_from_slice(bytes),
+            Some(ResponseValue::BulkString(Some(bytes))) => compact(bytes),
             Some(_) => return ResponseValue::Error("ERR key must be bulk string".into()),
             None => return ResponseValue::Error("ERR invalid number of arguments".into()),
         };
@@ -112,7 +122,7 @@ impl CommandHandler {
         let mut values = Vec::with_capacity(args.len().saturating_sub(1));
         for arg in &args[1..] {
             if let ResponseValue::BulkString(Some(bytes)) = arg {
-                values.push(Bytes::copy_from_slice(bytes));
+                values.push(compact(bytes));
             } else {
                 return ResponseValue::Error("ERR pushed values must be bulk strings".into());
             }
@@ -160,7 +170,7 @@ impl CommandHandler {
 
     fn handle_rpush(&self, args: &[ResponseValue]) -> ResponseValue {
         let key = match args.first() {
-            Some(ResponseValue::BulkString(Some(bytes))) => Bytes::copy_from_slice(bytes),
+            Some(ResponseValue::BulkString(Some(bytes))) => compact(bytes),
             Some(_) => return ResponseValue::Error("ERR key must be bulk string".into()),
             None => return ResponseValue::Error("ERR invalid number of arguments".into()),
         };
@@ -168,7 +178,7 @@ impl CommandHandler {
         let mut values = Vec::with_capacity(args.len().saturating_sub(1));
         for arg in &args[1..] {
             if let ResponseValue::BulkString(Some(bytes)) = arg {
-                values.push(Bytes::copy_from_slice(bytes));
+                values.push(compact(bytes));
             } else {
                 return ResponseValue::Error("ERR pushed values must be bulk strings".into());
             }
@@ -252,7 +262,7 @@ impl CommandHandler {
 
     fn handle_sadd(&self, args: &[ResponseValue]) -> ResponseValue {
         let key = match args.first() {
-            Some(ResponseValue::BulkString(Some(bytes))) => Bytes::copy_from_slice(bytes),
+            Some(ResponseValue::BulkString(Some(bytes))) => compact(bytes),
             Some(_) => return ResponseValue::Error("ERR key must be bulk string".into()),
             None => return ResponseValue::Error("ERR invalid number of arguments".into()),
         };
@@ -260,7 +270,7 @@ impl CommandHandler {
         let mut values = Vec::with_capacity(args.len().saturating_sub(1));
         for arg in &args[1..] {
             if let ResponseValue::BulkString(Some(bytes)) = arg {
-                let to_push = Bytes::copy_from_slice(bytes);
+                let to_push = compact(bytes);
                 values.push(to_push);
             } else {
                 return ResponseValue::Error("ERR pushed values must be bulk strings".into());
