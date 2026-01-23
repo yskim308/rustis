@@ -9,6 +9,13 @@ use rustis::parser::{parse, BufParseError};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
 
+#[cfg(not(target_env = "msvc"))]
+use tikv_jemallocator::Jemalloc;
+
+#[cfg(not(target_env = "msvc"))]
+#[global_allocator]
+static GLOBAL: Jemalloc = Jemalloc;
+
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> tokio::io::Result<()> {
     let args: Vec<String> = env::args().collect();
