@@ -45,26 +45,36 @@ impl CommandHandler {
         }
 
         let (cmd, args) = match items.split_first() {
-            Some((ResponseValue::BulkString(Some(bytes)), rest)) => {
-                (String::from_utf8_lossy(bytes).to_uppercase(), rest)
-            }
+            Some((ResponseValue::BulkString(Some(bytes)), rest)) => (bytes, rest),
             _ => return ResponseValue::Error("command must be bulk string".into()),
         };
 
-        match cmd.as_str() {
-            "PING" => ResponseValue::SimpleString("PONG".into()),
-            "GET" => self.handle_get(args),
-            "SET" => self.handle_set(args),
-            "LPUSH" => self.handle_lpush(args),
-            "LPOP" => self.handle_lpop(args),
-            "RPUSH" => self.handle_rpush(args),
-            "RPOP" => self.handle_rpop(args),
-            "LRANGE" => self.handle_lrange(args),
-            "SADD" => self.handle_sadd(args),
-            "SPOP" => self.handle_spop(args),
-            "SMEMBERS" => self.handle_smembers(args),
-            "CONFIG" => ResponseValue::Array(None),
-            _ => ResponseValue::Error("invalid command".into()),
+        if cmd.eq_ignore_ascii_case(b"PING") {
+            ResponseValue::SimpleString("PONG".into())
+        } else if cmd.eq_ignore_ascii_case(b"CONFIG") {
+            ResponseValue::Array(None)
+        } else if cmd.eq_ignore_ascii_case(b"GET") {
+            self.handle_get(args)
+        } else if cmd.eq_ignore_ascii_case(b"SET") {
+            self.handle_set(args)
+        } else if cmd.eq_ignore_ascii_case(b"LPUSH") {
+            self.handle_lpush(args)
+        } else if cmd.eq_ignore_ascii_case(b"LPOP") {
+            self.handle_lpop(args)
+        } else if cmd.eq_ignore_ascii_case(b"RPUSH") {
+            self.handle_rpush(args)
+        } else if cmd.eq_ignore_ascii_case(b"RPOP") {
+            self.handle_rpop(args)
+        } else if cmd.eq_ignore_ascii_case(b"LRANGE") {
+            self.handle_lrange(args)
+        } else if cmd.eq_ignore_ascii_case(b"SADD") {
+            self.handle_sadd(args)
+        } else if cmd.eq_ignore_ascii_case(b"SPOP") {
+            self.handle_spop(args)
+        } else if cmd.eq_ignore_ascii_case(b"SMEMBERS") {
+            self.handle_smembers(args)
+        } else {
+            ResponseValue::Error("invalid command".into())
         }
     }
 
