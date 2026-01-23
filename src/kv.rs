@@ -44,16 +44,6 @@ fn resolve_range(start: i64, stop: i64, len: usize) -> (usize, usize) {
     (start as usize, stop as usize)
 }
 
-const COMPACTION_THRESHOLD: usize = 2 * 1024;
-
-fn compact(b: Bytes) -> Bytes {
-    if b.len() < COMPACTION_THRESHOLD {
-        Bytes::copy_from_slice(&b)
-    } else {
-        b
-    }
-}
-
 impl KvStore {
     pub fn new() -> Self {
         Self {
@@ -64,7 +54,7 @@ impl KvStore {
     pub fn set(&self, key: Bytes, value: Bytes) -> Result<(), DatabaseError> {
         let mut db = self.db.borrow_mut();
 
-        db.insert(compact(key), RedisValue::String(compact(value)));
+        db.insert(key, RedisValue::String(value));
         Ok(())
     }
 
@@ -77,12 +67,12 @@ impl KvStore {
         let mut db = self.db.borrow_mut();
 
         let entry = db
-            .entry(compact(key))
+            .entry(key)
             .or_insert_with(|| RedisValue::List(VecDeque::new()));
         match entry {
             RedisValue::List(list) => {
                 for val in values {
-                    list.push_front(compact(val));
+                    list.push_front(val);
                 }
                 Ok(list.len() as i64)
             }
@@ -114,12 +104,12 @@ impl KvStore {
         let mut db = self.db.borrow_mut();
 
         let entry = db
-            .entry(compact(key))
+            .entry(key)
             .or_insert_with(|| RedisValue::List(VecDeque::new()));
         match entry {
             RedisValue::List(list) => {
                 for val in values {
-                    list.push_back(compact(val));
+                    list.push_back(val);
                 }
                 Ok(list.len() as i64)
             }
@@ -182,14 +172,14 @@ impl KvStore {
         let mut db = self.db.borrow_mut();
 
         let entry = db
-            .entry(compact(key))
+            .entry(key)
             .or_insert_with(|| RedisValue::Set(HashSet::new()));
 
         match entry {
             RedisValue::Set(set) => {
                 let mut count = 0;
                 for val in values {
-                    if set.insert(compact(val)) {
+                    if set.insert(val) {
                         count += 1
                     };
                 }
