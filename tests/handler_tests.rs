@@ -15,10 +15,10 @@ mod tests {
     }
 
     // Helper to extract string from ResponseValue for assertions
-    fn extract_str(val: ResponseValue) -> String {
+    fn extract_str(val: ResponseValue) -> Bytes {
         match val {
             ResponseValue::SimpleString(s) => s,
-            ResponseValue::BulkString(Some(b)) => String::from_utf8(b.to_vec()).unwrap(),
+            ResponseValue::BulkString(Some(b)) => b,
             ResponseValue::Error(s) => s,
             _ => panic!("Unexpected type for extraction: {:?}", val),
         }
@@ -33,7 +33,7 @@ mod tests {
     fn test_ping() {
         let handler = setup();
         let res = handler.process_command(make_cmd(vec!["PING"]));
-        assert_eq!(res, ResponseValue::SimpleString("PONG".to_string()));
+        assert_eq!(res, ResponseValue::SimpleString("PONG".into()));
     }
 
     #[test]
@@ -42,7 +42,7 @@ mod tests {
 
         // SET key value
         let res = handler.process_command(make_cmd(vec!["SET", "mykey", "hello"]));
-        assert_eq!(res, ResponseValue::SimpleString("OK".to_string()));
+        assert_eq!(res, ResponseValue::SimpleString("OK".into()));
 
         // GET key
         let res = handler.process_command(make_cmd(vec!["GET", "mykey"]));
@@ -121,6 +121,6 @@ mod tests {
         let handler = setup();
         // SET without value
         let res = handler.process_command(make_cmd(vec!["SET", "key"]));
-        assert!(extract_str(res).contains("wrong number of arguments"));
+        assert!(String::from_utf8_lossy(&extract_str(res)).contains("wrong number of arguments"));
     }
 }
