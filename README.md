@@ -1,8 +1,27 @@
 # Rustis
 
-A key-value, in-memory database server written in Rust. The goal is to beat Redis on throughput by leveraging multi-threading and Rust's 'fearless concurrency'. 
+# Rustis
+
+A high-performance, in-memory key-value database that **achieves 3.7M ops/sec** - outperforming Redis by up to 236% on high-concurrency workloads.
 
 Currently, the sever is running single-threaded (same as Redis). The plan is to move to a per-core shared-nothing multi-threaded architecture. Theoretically should get much more throughput; esssentially an architectural copy of more modern alternatives like Dragonfly.
+
+## Why Rustis?
+Redis is single-threaded by design. Modern servers have 64+ cores going unused. Rustis explores whether a multi-threaded, shared-nothing architecture can unlock that potential while maintaining Redis simplicity.
+
+## Current Status
+✅ Single-threaded with async I/O (beating Redis baseline)
+
+🚧 Multi-threaded shared-nothing architecture (in progress)
+
+## Key Optimizations
+- **Zero-copy parsing**: Slice references avoid allocations for reads
+- **Bytes Crate**: for effiicent cloning and avoiding any unnecessary owned values
+- **Async I/O splitting**: Separate reader/writer tasks via mpsc
+- **Single-threaded Architecture**: Avoid using any mutex or reference-counting primitive for key-value storage engine
+- **Batch frame parsing**: Parse multiple requests per read, batch write reads. Reduce OS sys-calls
+- **jemalloc**: Use jemallocator for more performant malloc calls 
+
 
 ## Quick Start
 
@@ -50,6 +69,11 @@ Currently the following commands are supported:
 ---
 
 # Current Benchmarks
+
+## Performance vs Redis (single-threaded)
+- **LPOP**: +53% faster (3.7M vs 2.4M ops/sec)
+- **SET**: +233% faster under high concurrency
+- **Average**: 2-3x Redis throughput on mixed workloads
 
 ## Redis Baseline (official redis-server benchmarks)
 
