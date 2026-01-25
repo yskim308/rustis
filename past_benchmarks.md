@@ -1,5 +1,45 @@
 # Benchmarks for Previous Versions
 
+
+## single_thread_v4
+
+1. zero copy parsing in the parser
+
+2. clone on owned values, no copy 
+
+3. optimize release compile profile 
+
+4. use jemalloc for memory allocation
+
+### single_thread_v4 vs single_thread_v3
+
+
+| Test Name | Cmd | RPS | Δ RPS | Latency (ms) | Δ Lat |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| High Concurrency & Throughput (Mixed) | SET | 2,500,000 | 🟢 +104.00% | 22.911 | 🟢 -47.74% |
+| High Concurrency & Throughput (Mixed) | GET | 2,421,308 | 🔴 -1.21% | 23.311 | 🔴 +1.25% |
+| High Concurrency & Throughput (Mixed) | LPUSH | 3,521,127 | 🟢 +57.04% | 15.831 | 🟢 -39.15% |
+| High Concurrency & Throughput (Mixed) | LPOP | 3,831,418 | 🟢 +38.70% | 13.999 | 🟢 -32.28% |
+| High Concurrency & Throughput (Mixed) | SADD | 2,309,469 | 🟢 +22.17% | 26.159 | 🟢 -17.01% |
+| High Concurrency & Throughput (Mixed) | SPOP | 2,024,292 | 🟢 +16.19% | 12.527 | 🟢 -24.71% |
+| Heavy Payload Saturation (4KB) | SET | 472,590 | 🟢 +4.44% | 31.199 | 🟢 -7.85% |
+| Heavy Payload Saturation (4KB) | GET | 794,913 | 🟢 +0.32% | 17.375 | 🟢 -4.40% |
+
+### single_thread_v4 vs redis baseline
+
+
+| Test Name | Cmd | RPS | Δ RPS | Latency (ms) | Δ Lat |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| High Concurrency & Throughput (Mixed) | SET | 2,500,000 | 🟢 +183.00% | 22.911 | 🟢 -69.99% |
+| High Concurrency & Throughput (Mixed) | GET | 2,421,308 | 🔴 -15.50% | 23.311 | 🔴 +27.70% |
+| High Concurrency & Throughput (Mixed) | LPUSH | 3,521,127 | 🟢 +36.62% | 15.831 | 🟢 -25.15% |
+| High Concurrency & Throughput (Mixed) | LPOP | 3,831,418 | 🟢 +57.47% | 13.999 | 🟢 -38.56% |
+| High Concurrency & Throughput (Mixed) | SADD | 2,309,469 | 🔴 -11.55% | 26.159 | 🔴 +27.94% |
+| High Concurrency & Throughput (Mixed) | SPOP | 2,024,292 | 🔴 -37.25% | 12.527 | 🟢 -5.32% |
+| Heavy Payload Saturation (4KB) | SET | 472,590 | 🔴 -3.12% | 31.199 | 🔴 +220.75% |
+| Heavy Payload Saturation (4KB) | GET | 794,913 | 🟢 +31.64% | 17.375 | 🟢 -16.65% |
+
+
 ## single_thread_v3
 
 1. conditional compaction of Bytes, use references if payload is large

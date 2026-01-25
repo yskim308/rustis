@@ -66,43 +66,29 @@ Currently the following commands are supported:
 
 ---
 
-## single_thread_v4
+## single_thread_v5
 
-1. zero copy parsing in the parser
+1. reading and writing are now two seperate async tasks that communicate through mpsc
 
-2. clone on owned values, no copy 
+- at this point, I think i've optimized single_thread as much as possible
 
-3. optimize release compile profile 
+- only thing left is to have a proper implementation of SPOP (currently a O(N) scan)
 
-4. use jemalloc for memory allocation
+- next steps would be to move to shared-nothing, true multi-threading
 
-### single_thread_v4 vs single_thread_v3
-
-
-| Test Name | Cmd | RPS | Δ RPS | Latency (ms) | Δ Lat |
-| :--- | :--- | :--- | :--- | :--- | :--- |
-| High Concurrency & Throughput (Mixed) | SET | 2,500,000 | 🟢 +104.00% | 22.911 | 🟢 -47.74% |
-| High Concurrency & Throughput (Mixed) | GET | 2,421,308 | 🔴 -1.21% | 23.311 | 🔴 +1.25% |
-| High Concurrency & Throughput (Mixed) | LPUSH | 3,521,127 | 🟢 +57.04% | 15.831 | 🟢 -39.15% |
-| High Concurrency & Throughput (Mixed) | LPOP | 3,831,418 | 🟢 +38.70% | 13.999 | 🟢 -32.28% |
-| High Concurrency & Throughput (Mixed) | SADD | 2,309,469 | 🟢 +22.17% | 26.159 | 🟢 -17.01% |
-| High Concurrency & Throughput (Mixed) | SPOP | 2,024,292 | 🟢 +16.19% | 12.527 | 🟢 -24.71% |
-| Heavy Payload Saturation (4KB) | SET | 472,590 | 🟢 +4.44% | 31.199 | 🟢 -7.85% |
-| Heavy Payload Saturation (4KB) | GET | 794,913 | 🟢 +0.32% | 17.375 | 🟢 -4.40% |
-
-### single_thread_v4 vs redis baseline
-
+### single_thread_v5 vs redis basline
 
 | Test Name | Cmd | RPS | Δ RPS | Latency (ms) | Δ Lat |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| High Concurrency & Throughput (Mixed) | SET | 2,500,000 | 🟢 +183.00% | 22.911 | 🟢 -69.99% |
-| High Concurrency & Throughput (Mixed) | GET | 2,421,308 | 🔴 -15.50% | 23.311 | 🔴 +27.70% |
-| High Concurrency & Throughput (Mixed) | LPUSH | 3,521,127 | 🟢 +36.62% | 15.831 | 🟢 -25.15% |
-| High Concurrency & Throughput (Mixed) | LPOP | 3,831,418 | 🟢 +57.47% | 13.999 | 🟢 -38.56% |
-| High Concurrency & Throughput (Mixed) | SADD | 2,309,469 | 🔴 -11.55% | 26.159 | 🔴 +27.94% |
-| High Concurrency & Throughput (Mixed) | SPOP | 2,024,292 | 🔴 -37.25% | 12.527 | 🟢 -5.32% |
-| Heavy Payload Saturation (4KB) | SET | 472,590 | 🔴 -3.12% | 31.199 | 🔴 +220.75% |
-| Heavy Payload Saturation (4KB) | GET | 794,913 | 🟢 +31.64% | 17.375 | 🟢 -16.65% |
+| High Concurrency & Throughput (Mixed) | SET | 2,941,176 | 🟢 +232.94% | 17.839 | 🟢 -76.64% |
+| High Concurrency & Throughput (Mixed) | GET | 2,976,190 | 🟢 +3.87% | 17.343 | 🟢 -5.00% |
+| High Concurrency & Throughput (Mixed) | LPUSH | 3,448,276 | 🟢 +33.79% | 15.487 | 🟢 -26.78% |
+| High Concurrency & Throughput (Mixed) | LPOP | 3,731,343 | 🟢 +53.36% | 14.055 | 🟢 -38.31% |
+| High Concurrency & Throughput (Mixed) | SADD | 2,958,580 | 🟢 +13.31% | 17.967 | 🟢 -12.13% |
+| High Concurrency & Throughput (Mixed) | SPOP | 2,074,689 | 🔴 -35.68% | 11.599 | 🟢 -12.33% |
+| Heavy Payload Saturation (4KB) | SET | 627,353 | 🟢 +28.61% | 22.431 | 🔴 +130.61% |
+| Heavy Payload Saturation (4KB) | GET | 723,589 | 🟢 +19.83% | 19.327 | 🟢 -7.29% |
+
 
 ---
 
@@ -110,98 +96,43 @@ Currently the following commands are supported:
 
 ## Current Architecture
 
-it all runs on single thread, tokio 
+**Main Flow**
+1. `main.rs` spawns a thread for each TCP stream
+2. each TCP stream spawns two threads: 
+	1. `writer_task`: writes to the write buffer
+	2. `reader_task`: reads the request and interacts with database, then communicates through mpsc channel 
 
-1. main reads from tcp stream into a BytesMut
-
-2. parser reads as many RESP frames as possible, returning BytesMut reference slices (not owned) 
- 
-3. the read frame is then handed to the handler
-
-4. the handler, depending on the command will decide whether to .clone() or deep copy 
-
-5. the cloned (or deep copied) values are handed off to the kv.rs (key-value) and stored 
+**Parsing Flow**
+1. the `reader_task` reads into a buffer, and parses as many frames as possible, then sends through transmitter 
+2. when a frame is parsed by `parse()`, it returns a ResponseValue that is then handled by the `CommandHandler`
+	- the `ResponseValue` enum holds `Bytes` where the `parse()` will store a slice-reference (for zero-copying)
+3. the `CommandHandler` will then deep copy values and hand it to `KvStore` to be stored in the hashmap 
+4. zero-copy references used for any non-insert command 
+5. the `CommandHandler` returns a response that is serialized into `Bytes` and send over the mspc channel to `writer_task`
+6. `writer_task` writes to the read buffer
 
 ```mermaid
-flowchart LR
-
-%% Define styles
-
-classDef storage fill:#e1f5fe,stroke:#01579b,stroke-width:2px,color:black;
-
-classDef process fill:#f3e5f5,stroke:#4a148c,stroke-width:2px,color:black;
-
-classDef decision fill:#fff9c4,stroke:#fbc02d,stroke-width:2px,color:black;
-
-  
-
-subgraph Tokio_Runtime [Tokio Runtime Single Thread]
-
-direction LR
-
-%% Step 1: Ingest
-
-TCP((TCP Stream))
-
-Main[Main Loop]
-
-Buffer[("BytesMut Buffer")]
-
-%% Step 2: Zero-Copy Parsing
-
-Parser(Parser)
-
-RefSlices[/"RESP Frames Ref Slices"/]
-
-  
-
-%% Step 3 & 4: Handling
-
-Handler{Handler}
-
-%% Allocation Strategy
-
-DeepCopy[Deep Copy Action]
-
-ShallowCopy["Bytes::clone Shallow"]
-
-%% Step 5: Storage
-
-KV[("kv.rs Storage")]
-
-end
-
-  
-
-%% Flow Connections
-
-TCP -->|1. Reads| Main
-
-Main -->|Writes to| Buffer
-
-Buffer -.->|2. Reads Borrow| Parser
-
-Parser -->|Returns| RefSlices
-
-RefSlices -->|3. Handed to| Handler
-
-Handler -- "4a. Ownership" --> DeepCopy
-
-Handler -- "4b. Shared" --> ShallowCopy
-
-DeepCopy -->|5. Store| KV
-
-ShallowCopy -->|5. Store| KV
-
-  
-
-%% Apply Classes
-
-class Buffer,KV,RefSlices storage;
-
-class Main,Parser,DeepCopy,ShallowCopy process;
-
-class Handler decision;
+graph TB
+    A[main.rs] -->|spawn thread per stream| B[TCP Stream Thread]
+    
+    B -->|spawn| C[writer_task]
+    B -->|spawn| D[reader_task]
+    
+    D -->|1. read buffer| E[parse frames]
+    E -->|2. ResponseValue<br/>slice-refs| F[CommandHandler]
+    F -->|3a. insert: deep copy| G[KvStore HashMap]
+    F -->|3b. other: zero-copy| H[generate response]
+    G --> H
+    H -->|4. serialize Bytes| I[mpsc channel]
+    
+    I -->|send| C
+    C -->|5. write buffer| J[TCP Stream]
+    
+    style A fill:#4A90E2,stroke:#2E5C8A,color:#fff
+    style D fill:#50C878,stroke:#2E8B57,color:#fff
+    style C fill:#E74C3C,stroke:#C0392B,color:#fff
+    style F fill:#9B59B6,stroke:#7D3C98,color:#fff
+    style G fill:#F39C12,stroke:#D68910,color:#fff 
 ```
 
 
