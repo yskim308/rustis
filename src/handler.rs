@@ -101,7 +101,7 @@ impl CommandHandler {
         };
 
         let value = match args.get(1) {
-            Some(ResponseValue::BulkString(Some(bytes))) => bytes.clone(),
+            Some(ResponseValue::BulkString(Some(bytes))) => Bytes::copy_from_slice(bytes),
             Some(_) => return ResponseValue::Error("ERR value must be bulk string".into()),
             None => return ResponseValue::Error("ERR invalid number of arguments".into()),
         };
@@ -122,7 +122,7 @@ impl CommandHandler {
         let mut values = Vec::with_capacity(args.len().saturating_sub(1));
         for arg in &args[1..] {
             if let ResponseValue::BulkString(Some(bytes)) = arg {
-                values.push(bytes.clone());
+                values.push(Bytes::copy_from_slice(bytes));
             } else {
                 return ResponseValue::Error("ERR pushed values must be bulk strings".into());
             }
@@ -178,7 +178,7 @@ impl CommandHandler {
         let mut values = Vec::with_capacity(args.len().saturating_sub(1));
         for arg in &args[1..] {
             if let ResponseValue::BulkString(Some(bytes)) = arg {
-                values.push(bytes.clone());
+                values.push(Bytes::copy_from_slice(bytes));
             } else {
                 return ResponseValue::Error("ERR pushed values must be bulk strings".into());
             }
@@ -270,7 +270,7 @@ impl CommandHandler {
         let mut values = Vec::with_capacity(args.len().saturating_sub(1));
         for arg in &args[1..] {
             if let ResponseValue::BulkString(Some(bytes)) = arg {
-                let to_push = bytes.clone();
+                let to_push = Bytes::copy_from_slice(bytes);
                 values.push(to_push);
             } else {
                 return ResponseValue::Error("ERR pushed values must be bulk strings".into());
