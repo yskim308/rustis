@@ -71,3 +71,15 @@ Timestamp,Git Hash,Note,Test Name,Command,RPS,Latency (p50)
 2026-01-23 16:31:06,3f09e66,single_thread_v4,High Concurrency & Throughput (Mixed),SPOP,2024291.50,12.527
 2026-01-23 16:31:10,3f09e66,single_thread_v4,Heavy Payload Saturation (4KB),SET,472589.81,31.199
 2026-01-23 16:31:10,3f09e66,single_thread_v4,Heavy Payload Saturation (4KB),GET,794912.56,17.375
+2026-01-25 20:24:10,bc13580,actormodel,Quick Sanity Check,INLINE,124999.99,0.175
+2026-01-25 20:24:10,bc13580,actormodel,Quick Sanity Check,MBULK,66666.67,0.719
+2026-01-25 20:24:13,bc13580,actormodel,Regular Load (Baseline),SET,240384.61,0.111
+2026-01-25 20:24:13,bc13580,actormodel,Regular Load (Baseline),GET,246913.58,0.111
+2026-01-25 20:24:27,bc13580,actormodel,High Concurrency & Throughput (Mixed),SET,2941176.50,17.839
+2026-01-25 20:24:27,bc13580,actormodel,High Concurrency & Throughput (Mixed),GET,2976190.50,17.343
+2026-01-25 20:24:27,bc13580,actormodel,High Concurrency & Throughput (Mixed),LPUSH,3448276.00,15.487
+2026-01-25 20:24:27,bc13580,actormodel,High Concurrency & Throughput (Mixed),LPOP,3731343.25,14.055
+2026-01-25 20:24:27,bc13580,actormodel,High Concurrency & Throughput (Mixed),SADD,2958580.00,17.967
+2026-01-25 20:24:27,bc13580,actormodel,High Concurrency & Throughput (Mixed),SPOP,2074688.88,11.599
+2026-01-25 20:24:31,bc13580,actormodel,Heavy Payload Saturation (4KB),SET,627352.56,22.431
+2026-01-25 20:24:31,bc13580,actormodel,Heavy Payload Saturation (4KB),GET,723589.00,19.327
