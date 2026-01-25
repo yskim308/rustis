@@ -1,10 +1,12 @@
 use std::env;
+use tokio::net::tcp::{OwnedReadHalf, OwnedWriteHalf};
+use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 use tokio::task;
 
-use bytes::BytesMut;
+use bytes::{Bytes, BytesMut};
 use rustis::handler::CommandHandler;
 use rustis::kv::KvStore;
-use rustis::parser::{parse, BufParseError};
+use rustis::parser::{parse, BufParseError, ResponseValue};
 
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
@@ -52,48 +54,132 @@ async fn main() -> tokio::io::Result<()> {
     Ok(())
 }
 
-async fn handle_connection(mut stream: TcpStream, kv: KvStore) -> tokio::io::Result<()> {
-    let mut read_buffer = BytesMut::with_capacity(16 * 1024);
-    let mut write_buffer = BytesMut::with_capacity(16 * 1024);
-    let handler = CommandHandler::new(kv.clone());
-    loop {
-        let bytes_read = stream.read_buf(&mut read_buffer).await?;
+async fn handle_connection(stream: TcpStream, kv: KvStore) -> tokio::io::Result<()> {
+    stream.set_nodelay(true)?;
 
-        if bytes_read == 0 {
-            return Ok(()); // Connection closed
+    let (read_half, write_half) = stream.into_split();
+
+    let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
+
+    tokio::task::spawn_local(async move { writer_task(write_half, rx).await });
+
+    reader_task(read_half, kv, tx).await?;
+
+    Ok(())
+}
+
+async fn writer_task(
+    mut write_half: OwnedWriteHalf,
+    mut rx: UnboundedReceiver<Bytes>,
+) -> tokio::io::Result<()> {
+    while let Some(data) = rx.recv().await {
+        write_half.write_all(&data).await?;
+    }
+    Ok(())
+}
+
+async fn reader_task(
+    mut read_half: OwnedReadHalf,
+    kv: KvStore,
+    tx: UnboundedSender<Bytes>,
+) -> tokio::io::Result<()> {
+    let mut read_buffer = BytesMut::with_capacity(64 * 1024);
+    let mut write_buffer = BytesMut::with_capacity(64 * 1024);
+    let handler = CommandHandler::new(kv);
+
+    // repeat until nothing to read
+    loop {
+        read_buffer.reserve(1024);
+        if read_half.read_buf(&mut read_buffer).await? == 0 {
+            break; //
         }
 
         loop {
             match parse(&mut read_buffer) {
                 Ok(value) => {
-                    let response = handler.process_command(value);
-                    response.serialize(&mut write_buffer);
+                    handler.process_command(value).serialize(&mut write_buffer);
                 }
                 Err(BufParseError::Incomplete) => {
-                    // Not enough data yet, continue reading from the socket
                     break;
                 }
                 Err(BufParseError::InvalidFirstByte(b)) => {
                     match b {
                         Some(byte) => {
-                            stream
-                                .write_all(format!("-invalid first byte: {}\r\n", byte).as_bytes())
-                                .await?
+                            let s = format!("-ERR invalid first byte: {}\r\n", byte);
+                            write_buffer.extend_from_slice(s.as_bytes());
                         }
-                        None => stream.write_all(b"-first byte not found\r\n").await?,
+                        None => write_buffer.extend_from_slice(b"-ERR first byte not found \r\n"),
                     };
-                    return Ok(());
+                    let _ = tx.send(write_buffer.freeze());
+                    return Ok(()); // Close connection on protocol error
                 }
                 _ => {
-                    stream.write_all(b"-internal server error\r\n").await?;
-                    return Ok(());
+                    write_buffer.extend_from_slice(b"-ERR internal server error\r\n");
+                    let _ = tx.send(write_buffer.freeze());
+                    return Ok(()); // Close connection on error
                 }
             }
         }
 
-        if !write_buffer.is_empty() {
-            stream.write_all(&write_buffer).await?;
-            write_buffer.clear();
-        }
+        // flush after all possible frames are handled
+        if tx.send(write_buffer.split().freeze()).is_err() {
+            eprint!("error in reader task send");
+            return Ok(()); // kill task if error
+        };
     }
+
+    Ok(())
 }
+
+// async fn handle_connection(mut stream: TcpStream, kv: KvStore) -> tokio::io::Result<()> {
+//     stream.set_nodelay(true)?;
+//
+//     // Start small, grow as needed
+//     let mut read_buffer = BytesMut::with_capacity(16 * 1024);
+//     let mut write_buffer = BytesMut::with_capacity(16 * 1024);
+//     let handler = CommandHandler::new(kv.clone());
+//
+//     loop {
+//         // loop 1: read as much as possible
+//         let mut first_read = true;
+//         loop {
+//             if first_read {
+//                 if stream.read_buf(&mut read_buffer).await? == 0 {
+//                     return Ok(());
+//                 }
+//                 first_read = false;
+//             }
+//
+//             // Try to read more without blocking
+//             read_buffer.reserve(16 * 1024);
+//             match stream.try_read_buf(&mut read_buffer) {
+//                 Ok(0) => return Ok(()), // EOF
+//                 Ok(_) => continue,      // Got more data, keep reading
+//                 Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => break,
+//                 Err(e) => return Err(e),
+//             }
+//         }
+//
+//         // loop 2: parse as much as possible
+//         loop {
+//             match parse(&mut read_buffer) {
+//                 Ok(value) => {
+//                     let response = handler.process_command(value);
+//                     write_buffer.reserve(1024);
+//                     response.serialize(&mut write_buffer);
+//                 }
+//                 Err(BufParseError::Incomplete) => break,
+//                 _ => {
+//                     stream.write_all(b"-ERR\r\n").await?;
+//                     return Ok(());
+//                 }
+//             }
+//         }
+//
+//         // Single write for all responses
+//         if !write_buffer.is_empty() {
+//             stream.write_all(&write_buffer).await?;
+//             write_buffer.clear();
+//         }
+//     }
+// }
