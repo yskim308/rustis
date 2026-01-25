@@ -105,3 +105,116 @@ Currently the following commands are supported:
 | Heavy Payload Saturation (4KB) | GET | 794,913 | 🟢 +31.64% | 17.375 | 🟢 -16.65% |
 
 ---
+
+# Code Architecture 
+
+## Current Architecture
+
+it all runs on single thread, tokio 
+
+1. main reads from tcp stream into a BytesMut
+
+2. parser reads as many RESP frames as possible, returning BytesMut reference slices (not owned) 
+ 
+3. the read frame is then handed to the handler
+
+4. the handler, depending on the command will decide whether to .clone() or deep copy 
+
+5. the cloned (or deep copied) values are handed off to the kv.rs (key-value) and stored 
+
+```mermaid
+flowchart LR
+
+%% Define styles
+
+classDef storage fill:#e1f5fe,stroke:#01579b,stroke-width:2px,color:black;
+
+classDef process fill:#f3e5f5,stroke:#4a148c,stroke-width:2px,color:black;
+
+classDef decision fill:#fff9c4,stroke:#fbc02d,stroke-width:2px,color:black;
+
+  
+
+subgraph Tokio_Runtime [Tokio Runtime Single Thread]
+
+direction LR
+
+%% Step 1: Ingest
+
+TCP((TCP Stream))
+
+Main[Main Loop]
+
+Buffer[("BytesMut Buffer")]
+
+%% Step 2: Zero-Copy Parsing
+
+Parser(Parser)
+
+RefSlices[/"RESP Frames Ref Slices"/]
+
+  
+
+%% Step 3 & 4: Handling
+
+Handler{Handler}
+
+%% Allocation Strategy
+
+DeepCopy[Deep Copy Action]
+
+ShallowCopy["Bytes::clone Shallow"]
+
+%% Step 5: Storage
+
+KV[("kv.rs Storage")]
+
+end
+
+  
+
+%% Flow Connections
+
+TCP -->|1. Reads| Main
+
+Main -->|Writes to| Buffer
+
+Buffer -.->|2. Reads Borrow| Parser
+
+Parser -->|Returns| RefSlices
+
+RefSlices -->|3. Handed to| Handler
+
+Handler -- "4a. Ownership" --> DeepCopy
+
+Handler -- "4b. Shared" --> ShallowCopy
+
+DeepCopy -->|5. Store| KV
+
+ShallowCopy -->|5. Store| KV
+
+  
+
+%% Apply Classes
+
+class Buffer,KV,RefSlices storage;
+
+class Main,Parser,DeepCopy,ShallowCopy process;
+
+class Handler decision;
+```
+
+
+## Future Optimizations / Considerations
+
+This is an ongoing project, and I am exploring the following options 
+
+- tinkering and optimizing with single-threaded performance (currently doing)
+
+- moving to a multi-threaded IO but single-threaded database engine architecture 
+
+- moving to fully multi-threaded, shared nothing
+
+- moving to a multi-threaded IO but single-threaded database engine architecture 
+
+- moving to fully multi-threaded, shared nothing
