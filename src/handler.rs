@@ -1,7 +1,7 @@
 use bytes::Bytes;
 
 use crate::kv::{KvStore, RedisValue};
-use crate::parser::ResponseValue;
+use crate::message::ResponseValue;
 
 pub struct CommandHandler {
     kv: KvStore,
