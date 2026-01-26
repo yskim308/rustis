@@ -1,4 +1,12 @@
 use bytes::{BufMut, Bytes, BytesMut};
+use tokio::sync::oneshot;
+
+pub enum ShardRequest {
+    Commmand {
+        args: Vec<Bytes>,
+        response_tx: oneshot::Sender<ResponseValue>,
+    },
+}
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum ResponseValue {
