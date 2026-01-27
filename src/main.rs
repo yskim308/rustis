@@ -1,15 +1,21 @@
+use socket2::{Domain, Socket, Type};
 use std::env;
+use std::net::SocketAddr;
+use std::sync::Arc;
 use tokio::net::tcp::{OwnedReadHalf, OwnedWriteHalf};
+use tokio::runtime::Builder;
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 use tokio::task;
 
 use bytes::{Bytes, BytesMut};
 use rustis::handler::CommandHandler;
 use rustis::kv::KvStore;
+use rustis::message::ShardRequest;
 use rustis::parser::{parse, BufParseError};
 
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
+use tokio::sync::mpsc;
 
 #[cfg(not(target_env = "msvc"))]
 use tikv_jemallocator::Jemalloc;
@@ -18,8 +24,78 @@ use tikv_jemallocator::Jemalloc;
 #[global_allocator]
 static GLOBAL: Jemalloc = Jemalloc;
 
-#[tokio::main(flavor = "current_thread")]
-async fn main() -> tokio::io::Result<()> {
+fn main() {
+    // get port from args
+    let args: Vec<String> = env::args().collect();
+    let port = args
+        .get(1)
+        .and_then(|s| s.parse::<u16>().ok())
+        .unwrap_or(6379);
+    let addr: SocketAddr = format!("127.0.0.1:{}", port).parse().unwrap();
+
+    // create channel matrix (bus) for N cores
+    let core_ids = core_affinity::get_core_ids().unwrap();
+    let num_cores = core_ids.len();
+
+    let mut txs: Vec<UnboundedSender<ShardRequest>> = Vec::with_capacity(num_cores);
+    let mut rxs: Vec<UnboundedReceiver<ShardRequest>> = Vec::with_capacity(num_cores);
+
+    for i in 0..num_cores {
+        let (tx, rx) = mpsc::unbounded_channel::<ShardRequest>();
+        txs[i] = tx;
+        rxs[i] = rx;
+    }
+
+    let router = Arc::new(txs); // every thread needs access to each transmitte
+
+    // spawn cores
+    let mut handles = Vec::new();
+
+    for (i, core_id) in core_ids.into_iter().enumerate() {
+        let core_router = router.clone();
+
+        // n^2 but should be fine, law of small numbers
+        let mut mailbox = rxs.remove(0);
+
+        let handle = std::thread::spawn(move || {
+            // pin the thread to the core
+            if !core_affinity::set_for_current(core_id) {
+                eprint!("Failed to pin thread to core: {:?}", core_id);
+                return;
+            }
+
+            // set up socket for reuse
+            let socket =
+                Socket::new(Domain::IPV4, Type::STREAM, None).expect("Error while creating socket");
+            socket
+                .set_reuse_port(true)
+                .expect("socket reuse not supported");
+            socket
+                .set_nonblocking(true)
+                .expect("failed to set nonblocking");
+
+            socket
+                .bind(&addr.into())
+                .expect("failed to bind to address");
+            socket.listen(1024).expect("failed to listen");
+
+            // convert to standard listener
+            let std_listener: std::net::TcpListener = socket.into();
+
+            // create single thread runtime for this specific core
+            let runtime = Builder::new_current_thread().enable_all().build().unwrap();
+
+            runtime.block_on(per_thread());
+        });
+        handles.push(handle);
+    }
+
+    for h in handles {
+        h.join().unwrap();
+    }
+}
+
+async fn per_thread() -> tokio::io::Result<()> {
     let args: Vec<String> = env::args().collect();
     let port = args
         .get(1)
