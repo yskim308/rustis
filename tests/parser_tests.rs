@@ -1,5 +1,8 @@
 use bytes::BytesMut;
-use rustis::parser::{parse, BufParseError, ResponseValue};
+use rustis::{
+    message::ResponseValue,
+    parser::{parse, BufParseError},
+};
 
 // Helper to reduce boilerplate
 fn parse_buffer(input: &[u8]) -> Result<ResponseValue, BufParseError> {
