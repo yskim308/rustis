@@ -60,3 +60,15 @@ impl ResponseValue {
         }
     }
 }
+
+pub struct WorkerMessage {
+    pub connection_id: u64,
+    pub seq: u64,
+    pub response_value: ResponseValue,
+}
+
+pub struct ResponseMessage {
+    pub connection_id: u64,
+    pub seq: u64,
+    pub response_value: ResponseValue,
+}
