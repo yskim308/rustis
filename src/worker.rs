@@ -22,7 +22,6 @@ pub fn worker_main(
         while let Some(msg) = rx.recv().await {
             let response = process_command(&kv, msg.response_value);
             let _ = tx.send(ResponseMessage {
-                connection_id: msg.connection_id,
                 seq: msg.seq,
                 response_value: response,
             });
