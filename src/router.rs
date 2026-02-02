@@ -53,30 +53,36 @@ pub fn route_message(
         }
     };
 
-    let _ = tx.send(WorkerMessage {
+    tx.send(WorkerMessage {
         seq,
         response_value: frame,
-    });
+        tx: writer_tx,
+    })
+    .unwrap()
 }
 
 fn send_error(writer_tx: &UnboundedSender<ResponseMessage>, seq: u64, error_msg: &'static str) {
-    writer_tx.send(ResponseMessage {
-        seq,
-        response_value: ResponseValue::Error(error_msg.into()),
-    });
+    writer_tx
+        .send(ResponseMessage {
+            seq,
+            response_value: ResponseValue::Error(error_msg.into()),
+        })
+        .unwrap();
 }
 
 fn send_string(writer_tx: &UnboundedSender<ResponseMessage>, seq: u64, msg: &'static str) {
-    writer_tx.send(ResponseMessage {
-        seq,
-        response_value: ResponseValue::Error(msg.into()),
-    });
+    writer_tx
+        .send(ResponseMessage {
+            seq,
+            response_value: ResponseValue::Error(msg.into()),
+        })
+        .unwrap();
 }
 
 fn extract_key(
     writer_tx: &UnboundedSender<ResponseMessage>,
     seq: u64,
-    items: &Vec<ResponseValue>,
+    items: &[ResponseValue],
 ) -> Option<Bytes> {
     let (cmd, args) = match items.split_first() {
         Some((ResponseValue::BulkString(Some(bytes)), rest)) => (bytes, rest),

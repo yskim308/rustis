@@ -1,5 +1,5 @@
 use bytes::{BufMut, Bytes, BytesMut};
-use tokio::sync::oneshot;
+use tokio::sync::{mpsc::UnboundedSender, oneshot};
 
 pub enum ShardRequest {
     Commmand {
@@ -64,6 +64,7 @@ impl ResponseValue {
 pub struct WorkerMessage {
     pub seq: u64,
     pub response_value: ResponseValue,
+    pub tx: UnboundedSender<ResponseMessage>,
 }
 
 pub struct ResponseMessage {
