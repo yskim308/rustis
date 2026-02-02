@@ -6,7 +6,7 @@ use tokio::sync::mpsc::UnboundedSender;
 use crate::message::{ResponseValue, WorkerMessage};
 
 pub fn route_message(
-    router: Vec<UnboundedSender<WorkerMessage>>,
+    router: &[UnboundedSender<WorkerMessage>],
     frame: ResponseValue,
     seq: u64,
     writer_tx: UnboundedSender<Bytes>,
