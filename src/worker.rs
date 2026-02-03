@@ -9,11 +9,7 @@ use crate::{
     message::{ResponseMessage, WorkerMessage},
 };
 
-pub fn worker_main(
-    _worker_id: usize,
-    mut rx: UnboundedReceiver<WorkerMessage>,
-    tx: UnboundedSender<ResponseMessage>,
-) {
+pub fn worker_main(_worker_id: usize, mut rx: UnboundedReceiver<WorkerMessage>) {
     let kv = KvStore::new();
 
     let runtime = Builder::new_current_thread().enable_all().build().unwrap();
@@ -21,7 +17,7 @@ pub fn worker_main(
     runtime.block_on(async move {
         while let Some(msg) = rx.recv().await {
             let response = process_command(&kv, msg.response_value);
-            let _ = tx.send(ResponseMessage {
+            let _ = msg.tx.send(ResponseMessage {
                 seq: msg.seq,
                 response_value: response,
             });
