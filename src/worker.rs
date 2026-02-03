@@ -1,7 +1,4 @@
-use tokio::{
-    runtime::Builder,
-    sync::mpsc::{UnboundedReceiver, UnboundedSender},
-};
+use tokio::{runtime::Builder, sync::mpsc::UnboundedReceiver};
 
 use crate::{
     handler::process_command,

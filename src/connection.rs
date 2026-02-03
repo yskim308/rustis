@@ -1,6 +1,6 @@
 use std::{env, sync::Arc};
 
-use bytes::{Bytes, BytesMut};
+use bytes::BytesMut;
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     net::{
