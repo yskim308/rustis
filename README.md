@@ -2,7 +2,8 @@
 
 A high-performance, in-memory key-value database that **achieves 3.7M ops/sec** - outperforming Redis by up to 236% on high-concurrency workloads.
 
-Currently, the server is multi-threaded with a fan-in / fan-out model. It is not as performant as the single-threaded version (check branch `single_thread`) due to sync overhead.
+> [!NOTE]
+> Currently, the server is multi-threaded with a fan-in / fan-out model. It is not as performant as the single-threaded version (check branch `single_thread`) due to sync overhead.
 
 This is an ongoing project, and the plan is to adopt DragonflyDB's shared-nothing architecture. 
 
