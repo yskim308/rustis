@@ -1,6 +1,31 @@
 # Benchmarks for Previous Versions
 
 
+## single_thread_v5
+
+1. reading and writing are now two seperate async tasks that communicate through mpsc
+
+- at this point, I think i've optimized single_thread as much as possible
+
+- only thing left is to have a proper implementation of SPOP (currently a O(N) scan)
+
+- next steps would be to move to shared-nothing, true multi-threading
+
+### single_thread_v5 vs redis basline
+
+| Test Name | Cmd | RPS | Δ RPS | Latency (ms) | Δ Lat |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| High Concurrency & Throughput (Mixed) | SET | 2,941,176 | 🟢 +232.94% | 17.839 | 🟢 -76.64% |
+| High Concurrency & Throughput (Mixed) | GET | 2,976,190 | 🟢 +3.87% | 17.343 | 🟢 -5.00% |
+| High Concurrency & Throughput (Mixed) | LPUSH | 3,448,276 | 🟢 +33.79% | 15.487 | 🟢 -26.78% |
+| High Concurrency & Throughput (Mixed) | LPOP | 3,731,343 | 🟢 +53.36% | 14.055 | 🟢 -38.31% |
+| High Concurrency & Throughput (Mixed) | SADD | 2,958,580 | 🟢 +13.31% | 17.967 | 🟢 -12.13% |
+| High Concurrency & Throughput (Mixed) | SPOP | 2,074,689 | 🔴 -35.68% | 11.599 | 🟢 -12.33% |
+| Heavy Payload Saturation (4KB) | SET | 627,353 | 🟢 +28.61% | 22.431 | 🔴 +130.61% |
+| Heavy Payload Saturation (4KB) | GET | 723,589 | 🟢 +19.83% | 19.327 | 🟢 -7.29% |
+
+
+
 ## single_thread_v4
 
 1. zero copy parsing in the parser

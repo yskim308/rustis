@@ -83,3 +83,13 @@ Timestamp,Git Hash,Note,Test Name,Command,RPS,Latency (p50)
 2026-01-25 20:24:27,bc13580,actormodel,High Concurrency & Throughput (Mixed),SPOP,2074688.88,11.599
 2026-01-25 20:24:31,bc13580,actormodel,Heavy Payload Saturation (4KB),SET,627352.56,22.431
 2026-01-25 20:24:31,bc13580,actormodel,Heavy Payload Saturation (4KB),GET,723589.00,19.327
+2026-02-05 13:46:26,e744423,multithread_v1,Regular Load (Baseline),SET,210526.31,0.127
+2026-02-05 13:46:26,e744423,multithread_v1,Regular Load (Baseline),GET,216684.73,0.127
+2026-02-05 13:46:43,e744423,multithread_v1,High Concurrency & Throughput (Mixed),SET,621118.00,99.455
+2026-02-05 13:46:43,e744423,multithread_v1,High Concurrency & Throughput (Mixed),GET,636942.62,97.919
+2026-02-05 13:46:43,e744423,multithread_v1,High Concurrency & Throughput (Mixed),LPUSH,2469135.75,23.119
+2026-02-05 13:46:43,e744423,multithread_v1,High Concurrency & Throughput (Mixed),LPOP,2444987.75,21.215
+2026-02-05 13:46:43,e744423,multithread_v1,High Concurrency & Throughput (Mixed),SADD,3215434.25,17.759
+2026-02-05 13:46:43,e744423,multithread_v1,High Concurrency & Throughput (Mixed),SPOP,1540832.12,21.183
+2026-02-05 13:46:48,e744423,multithread_v1,Heavy Payload Saturation (4KB),SET,392156.88,37.759
+2026-02-05 13:46:48,e744423,multithread_v1,Heavy Payload Saturation (4KB),GET,373692.06,39.423

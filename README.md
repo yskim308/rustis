@@ -1,10 +1,10 @@
 # Rustis
 
-# Rustis
-
 A high-performance, in-memory key-value database that **achieves 3.7M ops/sec** - outperforming Redis by up to 236% on high-concurrency workloads.
 
-Currently, the sever is running single-threaded (same as Redis). The plan is to move to a per-core shared-nothing multi-threaded architecture. Theoretically should get much more throughput; esssentially an architectural copy of more modern alternatives like Dragonfly.
+Currently, the server is multi-threaded with a fan-in / fan-out model. It is not as performant as the single-threaded version (check branch `single_thread`) due to sync overhead.
+
+This is an ongoing project, and the plan is to adopt DragonflyDB's shared-nothing architecture. 
 
 ## Why Rustis?
 Redis is single-threaded by design. Modern servers have 64+ cores going unused. Rustis explores whether a multi-threaded, shared-nothing architecture can unlock that potential while maintaining Redis simplicity.
@@ -17,9 +17,6 @@ Redis is single-threaded by design. Modern servers have 64+ cores going unused. 
 ## Key Optimizations
 - **Zero-copy parsing**: Slice references avoid allocations for reads
 - **Bytes Crate**: for effiicent cloning and avoiding any unnecessary owned values
-- **Async I/O splitting**: Separate reader/writer tasks via mpsc
-- **Single-threaded Architecture**: Avoid using any mutex or reference-counting primitive for key-value storage engine
-- **Batch frame parsing**: Parse multiple requests per read, batch write reads. Reduce OS sys-calls
 - **jemalloc**: Use jemallocator for more performant malloc calls 
 
 
@@ -70,11 +67,6 @@ Currently the following commands are supported:
 
 # Current Benchmarks
 
-## Performance vs Redis (single-threaded)
-- **LPOP**: +53% faster (3.7M vs 2.4M ops/sec)
-- **SET**: +233% faster under high concurrency
-- **Average**: 2-3x Redis throughput on mixed workloads
-
 ## Redis Baseline (official redis-server benchmarks)
 
 |Test Name                            |Command|RPS       |Latency (p50)|
@@ -90,86 +82,104 @@ Currently the following commands are supported:
 
 ---
 
-## single_thread_v5
+## multithread_v1 vs Redis Baseline 
 
-1. reading and writing are now two seperate async tasks that communicate through mpsc
-
-- at this point, I think i've optimized single_thread as much as possible
-
-- only thing left is to have a proper implementation of SPOP (currently a O(N) scan)
-
-- next steps would be to move to shared-nothing, true multi-threading
-
-### single_thread_v5 vs redis basline
 
 | Test Name | Cmd | RPS | Δ RPS | Latency (ms) | Δ Lat |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| High Concurrency & Throughput (Mixed) | SET | 2,941,176 | 🟢 +232.94% | 17.839 | 🟢 -76.64% |
-| High Concurrency & Throughput (Mixed) | GET | 2,976,190 | 🟢 +3.87% | 17.343 | 🟢 -5.00% |
-| High Concurrency & Throughput (Mixed) | LPUSH | 3,448,276 | 🟢 +33.79% | 15.487 | 🟢 -26.78% |
-| High Concurrency & Throughput (Mixed) | LPOP | 3,731,343 | 🟢 +53.36% | 14.055 | 🟢 -38.31% |
-| High Concurrency & Throughput (Mixed) | SADD | 2,958,580 | 🟢 +13.31% | 17.967 | 🟢 -12.13% |
-| High Concurrency & Throughput (Mixed) | SPOP | 2,074,689 | 🔴 -35.68% | 11.599 | 🟢 -12.33% |
-| Heavy Payload Saturation (4KB) | SET | 627,353 | 🟢 +28.61% | 22.431 | 🔴 +130.61% |
-| Heavy Payload Saturation (4KB) | GET | 723,589 | 🟢 +19.83% | 19.327 | 🟢 -7.29% |
+| High Concurrency & Throughput (Mixed) | SET | 621,118 | 🔴 -29.69% | 99.455 | 🔴 +30.26% |
+| High Concurrency & Throughput (Mixed) | GET | 636,943 | 🔴 -77.77% | 97.919 | 🔴 +436.40% |
+| High Concurrency & Throughput (Mixed) | LPUSH | 2,469,136 | 🔴 -4.20% | 23.119 | 🔴 +9.30% |
+| High Concurrency & Throughput (Mixed) | LPOP | 2,444,988 | 🟢 +0.49% | 21.215 | 🟢 -6.88% |
+| High Concurrency & Throughput (Mixed) | SADD | 3,215,434 | 🟢 +23.15% | 17.759 | 🟢 -13.15% |
+| High Concurrency & Throughput (Mixed) | SPOP | 1,540,832 | 🔴 -52.23% | 21.183 | 🔴 +60.10% |
+| Heavy Payload Saturation (4KB) | SET | 392,157 | 🔴 -19.61% | 37.759 | 🔴 +288.19% |
+| Heavy Payload Saturation (4KB) | GET | 373,692 | 🔴 -38.12% | 39.423 | 🔴 +89.11% |
 
+
+- currently, we are *worse* than the single_threaded architecture (check branch `single_thread` for details on the optimized, single-threaded version)
 
 ---
 
-# Code Architecture 
+# Code Architecture
 
-## Current Architecture
+- we are using a fan-out / fan-in model 
 
-**Main Flow**
-1. `main.rs` spawns a thread for each TCP stream
-2. each TCP stream spawns two threads: 
-	1. `writer_task`: writes to the write buffer
-	2. `reader_task`: reads the request and interacts with database, then communicates through mpsc channel 
+1. an async thread (single-threaded) IO thread is spawned, and each thread has a asynchronous worker and writer task (each connection gets a thread)
 
-**Parsing Flow**
-1. the `reader_task` reads into a buffer, and parses as many frames as possible, then sends through transmitter 
-2. when a frame is parsed by `parse()`, it returns a ResponseValue that is then handled by the `CommandHandler`
-	- the `ResponseValue` enum holds `Bytes` where the `parse()` will store a slice-reference (for zero-copying)
-3. the `CommandHandler` will then deep copy values and hand it to `KvStore` to be stored in the hashmap 
-4. zero-copy references used for any non-insert command 
-5. the `CommandHandler` returns a response that is serialized into `Bytes` and send over the mspc channel to `writer_task`
-6. `writer_task` writes to the read buffer
+2. N synchronous threads (where N = # of cpu cores) 
+
+3. `reader_task` parses, and then hands it off to `router.rs`
+
+4. `router.rs` checks the key, hashes it, and then hands the parsed response to the worker that owns that hash through the mpsc channel 
+
+5. the worker processes and interacts with its owned key-value store, and then sends the response value to the writer task
+
+6. `writer_task` is awaiting on its tx and orders the responses according to the `seq` values, then writes 
 
 ```mermaid
-graph TB
-    A[main.rs] -->|spawn thread per stream| B[TCP Stream Thread]
+graph LR
+    Client[Client] -->|TCP| Reader[Reader Task<br/>Parse RESP]
     
-    B -->|spawn| C[writer_task]
-    B -->|spawn| D[reader_task]
+    Reader --> Router[Router<br/>hash key % N]
     
-    D -->|1. read buffer| E[parse frames]
-    E -->|2. ResponseValue<br/>slice-refs| F[CommandHandler]
-    F -->|3a. insert: deep copy| G[KvStore HashMap]
-    F -->|3b. other: zero-copy| H[generate response]
-    G --> H
-    H -->|4. serialize Bytes| I[mpsc channel]
+    Router -->|mpsc| W0[Worker 0<br/>KV Shard 0]
+    Router -->|mpsc| W1[Worker 1<br/>KV Shard 1]
+    Router -->|mpsc| WN[Worker N<br/>KV Shard N]
     
-    I -->|send| C
-    C -->|5. write buffer| J[TCP Stream]
+    W0 -->|mpsc<br/>+ seq| Writer[Writer Task<br/>Order & Send]
+    W1 -->|mpsc<br/>+ seq| Writer
+    WN -->|mpsc<br/>+ seq| Writer
     
-    style A fill:#4A90E2,stroke:#2E5C8A,color:#fff
-    style D fill:#50C878,stroke:#2E8B57,color:#fff
-    style C fill:#E74C3C,stroke:#C0392B,color:#fff
-    style F fill:#9B59B6,stroke:#7D3C98,color:#fff
-    style G fill:#F39C12,stroke:#D68910,color:#fff 
+    Writer -->|TCP| Client
 ```
 
+## Drawbacks / Performance Penalties 
 
-## Future Optimizations / Considerations
+we are *much* worse than single-threaded because 
 
-This is an ongoing project, and I am exploring the following options 
+- the overhead for synchronization between threads is very high (synch overhead for **every** request adds up)
 
-- tinkering and optimizing with single-threaded performance (currently doing)
+- cache line bouncing because of the shared memory structures (MPSC internals, message data bouncing around threads, sequence number tracking)
 
-- moving to a multi-threaded IO but single-threaded database engine architecture 
+- Head-of-line blocking if a worker that owns the cache is busy 
 
-- moving to fully multi-threaded, shared nothing
+- coordinator thread can become the bottleneck
 
-- moving to a multi-threaded IO but single-threaded database engine architecture 
+Meanwhile, the single-threaded iteration avoided all of these problems
 
-- moving to fully multi-threaded, shared nothing
+- No sync overhead 
+
+- No channel communication penalties
+
+- perfect cache locality, and no context switching 
+
+We are getting the worst parts of both single-thread *and* multi-threading because 
+
+1. IO is still serializing all coordinatio 
+
+2. each request pays the a big round trip penalty (io -> worker -> io)
+
+3. pipelining doesn't really work well with workers 
+
+4. each redis request is small, so the work 'unit' doesn't justify the cost of coordination
+
+### Next Steps 
+
+I will look to implement true shared-nothing architecture, dragonflyDB style where: 
+
+- we spawn N threads for N cores 
+
+- each thread actually owns its own IO 
+
+- essentially N single-threaded versions running 
+
+This should avoid: 
+
+- sync overhead -> Only if keys do not belong to a thread will there be communication, but not for every requeset
+
+- cache line bouncing -> no shared memeory structures, especially the MPSC internals 
+
+- coordinator thread will not be a bottleneck because each thread is responsible for their own read and writes 
+
+Gotta follow **KISS**: keep it simple, stupid. I learned a lot from implementing this actor model, but ultimately the complexity actually makes it worse! 
