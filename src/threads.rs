@@ -1,4 +1,5 @@
 use core_affinity;
+use thread_priority::{set_current_thread_priority, ThreadPriority};
 use tokio::sync::mpsc::{self, UnboundedSender};
 
 use crate::{message::WorkerMessage, worker::worker_main};
@@ -20,9 +21,15 @@ pub fn spawn_threads() -> Vec<UnboundedSender<WorkerMessage>> {
         let mailxbox = rxs.remove(0);
 
         std::thread::spawn(move || {
+            if let Err(err) = set_current_thread_priority(ThreadPriority::Max) {
+                eprintln!("Warning: failed to set priority to thread {:?}", err);
+            }
+
+            #[cfg(target_os = "linux")]
             if !core_affinity::set_for_current(core_id) {
                 eprintln!("failed to pin thread to core: {:?}", core_id);
             }
+
             worker_main(core_id.id, mailxbox);
         });
     }
