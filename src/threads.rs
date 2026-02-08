@@ -1,10 +1,10 @@
 use core_affinity;
-use crossbeam::channel::{self, Sender};
+use rtrb::{Producer, RingBuffer};
 use thread_priority::{set_current_thread_priority, ThreadPriority};
 
 use crate::{message::WorkerMessage, worker::worker_main};
 
-pub fn spawn_threads() -> Vec<Vec<Sender<WorkerMessage>>> {
+pub fn spawn_threads() -> Vec<Vec<Producer<WorkerMessage>>> {
     let core_ids = core_affinity::get_core_ids().unwrap();
     let num_cores = core_ids.len();
 
@@ -15,7 +15,7 @@ pub fn spawn_threads() -> Vec<Vec<Sender<WorkerMessage>>> {
         let mut tx_vec = Vec::with_capacity(num_cores);
         let mut rx_vec = Vec::with_capacity(num_cores);
         for _ in 0..num_cores {
-            let (tx, rx) = channel::unbounded::<WorkerMessage>();
+            let (tx, rx) = RingBuffer::<WorkerMessage>::new(4096);
             tx_vec.push(tx);
             rx_vec.push(rx);
         }
