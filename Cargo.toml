@@ -6,6 +6,7 @@ edition = "2024"
 [dependencies]
 bytes = "1.11.0"
 core_affinity = "0.8.3"
+crossbeam = "0.8.4"
 memchr = "2.7.6"
 socket2 = "0.6.2"
 thread-priority = "3.0.0"

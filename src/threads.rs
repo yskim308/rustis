@@ -1,10 +1,10 @@
 use core_affinity;
+use crossbeam::channel::{self, Sender};
 use thread_priority::{set_current_thread_priority, ThreadPriority};
-use tokio::sync::mpsc::{self, UnboundedSender};
 
 use crate::{message::WorkerMessage, worker::worker_main};
 
-pub fn spawn_threads() -> Vec<UnboundedSender<WorkerMessage>> {
+pub fn spawn_threads() -> Vec<Vec<Sender<WorkerMessage>>> {
     let core_ids = core_affinity::get_core_ids().unwrap();
     let num_cores = core_ids.len();
 
@@ -12,9 +12,15 @@ pub fn spawn_threads() -> Vec<UnboundedSender<WorkerMessage>> {
     let mut rxs = Vec::with_capacity(num_cores);
 
     for _ in 0..num_cores {
-        let (tx, rx) = mpsc::unbounded_channel::<WorkerMessage>();
-        txs.push(tx);
-        rxs.push(rx);
+        let mut tx_vec = Vec::with_capacity(num_cores);
+        let mut rx_vec = Vec::with_capacity(num_cores);
+        for _ in 0..num_cores {
+            let (tx, rx) = channel::unbounded::<WorkerMessage>();
+            tx_vec.push(tx);
+            rx_vec.push(rx);
+        }
+        txs.push(tx_vec);
+        rxs.push(rx_vec);
     }
 
     for core_id in core_ids.into_iter() {
@@ -30,7 +36,7 @@ pub fn spawn_threads() -> Vec<UnboundedSender<WorkerMessage>> {
                 eprintln!("failed to pin thread to core: {:?}", core_id);
             }
 
-            worker_main(core_id.id, mailxbox);
+            // worker_main(core_id.id, mailxbox);
         });
     }
 
