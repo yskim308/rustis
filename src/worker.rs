@@ -1,4 +1,6 @@
-use tokio::{runtime::Builder, sync::mpsc::UnboundedReceiver};
+use crossbeam::utils;
+
+use rtrb::Consumer;
 
 use crate::{
     handler::process_command,
@@ -6,18 +8,28 @@ use crate::{
     message::{ResponseMessage, WorkerMessage},
 };
 
-pub fn worker_main(_worker_id: usize, mut rx: UnboundedReceiver<WorkerMessage>) {
+pub fn worker_main(_worker_id: usize, mut inboxes: Vec<Consumer<WorkerMessage>>) {
     let kv = KvStore::new();
+    let backoff = utils::Backoff::new();
 
-    let runtime = Builder::new_current_thread().enable_all().build().unwrap();
+    loop {
+        let mut processed = false;
 
-    runtime.block_on(async move {
-        while let Some(msg) = rx.recv().await {
-            let response = process_command(&kv, msg.response_value);
-            let _ = msg.tx.send(ResponseMessage {
-                seq: msg.seq,
-                response_value: response,
-            });
+        for inbox in inboxes.iter_mut() {
+            if let Ok(mut msg) = inbox.pop() {
+                let response = process_command(&kv, msg.response_value);
+                let _ = msg.tx.push(ResponseMessage {
+                    seq: msg.seq,
+                    response_value: response,
+                });
+                processed = true;
+                backoff.reset();
+            }
         }
-    })
+
+        // Adaptive Backoff
+        if !processed {
+            backoff.snooze();
+        }
+    }
 }
