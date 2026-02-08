@@ -1,5 +1,3 @@
-use crossbeam::utils;
-
 use rtrb::Consumer;
 
 use crate::{
@@ -8,9 +6,8 @@ use crate::{
     message::{ResponseMessage, WorkerMessage},
 };
 
-pub fn worker_main(_worker_id: usize, mut inboxes: Vec<Consumer<WorkerMessage>>) {
+pub async fn worker_main(_worker_id: usize, mut inboxes: Vec<Consumer<WorkerMessage>>) {
     let kv = KvStore::new();
-    let backoff = utils::Backoff::new();
 
     loop {
         let mut processed = false;
@@ -23,13 +20,11 @@ pub fn worker_main(_worker_id: usize, mut inboxes: Vec<Consumer<WorkerMessage>>)
                     response_value: response,
                 });
                 processed = true;
-                backoff.reset();
             }
         }
 
-        // Adaptive Backoff
         if !processed {
-            backoff.snooze();
+            tokio::task::yield_now().await;
         }
     }
 }

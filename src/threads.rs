@@ -1,6 +1,7 @@
 use core_affinity;
 use rtrb::{Producer, RingBuffer};
 use thread_priority::{set_current_thread_priority, ThreadPriority};
+use tokio::task::LocalSet;
 
 use crate::{message::WorkerMessage, worker::worker_main};
 
@@ -35,8 +36,17 @@ pub fn spawn_threads() -> Vec<Vec<Producer<WorkerMessage>>> {
             if !core_affinity::set_for_current(core_id) {
                 eprintln!("failed to pin thread to core: {:?}", core_id);
             }
+            let rt = tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .unwrap();
 
-            // worker_main(core_id.id, mailxbox);
+            let local = LocalSet::new();
+
+            // spawn worker / poller
+            local.spawn_local(worker_main(core_id.id, mailxbox));
+
+            rt.block_on(local);
         });
     }
 
