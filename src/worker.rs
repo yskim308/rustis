@@ -1,4 +1,4 @@
-use rtrb::Consumer;
+use rtrb::{Consumer, Producer};
 
 use crate::{
     handler::process_command,
@@ -6,17 +6,23 @@ use crate::{
     message::{ResponseMessage, WorkerMessage},
 };
 
-pub async fn worker_main(_worker_id: usize, mut inboxes: Vec<Consumer<WorkerMessage>>) {
+pub async fn worker_main(
+    _worker_id: usize,
+    mut inboxes: Vec<Consumer<WorkerMessage>>,
+    mut resp_outboxes: Vec<Producer<ResponseMessage>>,
+) {
     let kv = KvStore::new();
 
     loop {
         let mut processed = false;
 
         for inbox in inboxes.iter_mut() {
-            if let Ok(mut msg) = inbox.pop() {
+            if let Ok(msg) = inbox.pop() {
                 let response = process_command(&kv, msg.response_value);
-                let _ = msg.tx.push(ResponseMessage {
+                // note: later, we should be using .get() and handling errors properly
+                resp_outboxes[msg.src_core].push(ResponseMessage {
                     seq: msg.seq,
+                    conn_token: msg.conn_token,
                     response_value: response,
                 });
                 processed = true;
