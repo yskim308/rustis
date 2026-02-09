@@ -1,11 +1,13 @@
+use std::sync::Arc;
+
 use core_affinity;
-use rtrb::{Producer, RingBuffer};
+use rtrb::RingBuffer;
 use thread_priority::{set_current_thread_priority, ThreadPriority};
 use tokio::task::LocalSet;
 
-use crate::{message::WorkerMessage, worker::worker_main};
+use crate::{connection::spawn_io, message::WorkerMessage, worker::worker_main};
 
-pub fn spawn_threads() -> Vec<Vec<Producer<WorkerMessage>>> {
+pub fn spawn_threads() {
     let core_ids = core_affinity::get_core_ids().unwrap();
     let num_cores = core_ids.len();
 
@@ -25,9 +27,11 @@ pub fn spawn_threads() -> Vec<Vec<Producer<WorkerMessage>>> {
     }
 
     for core_id in core_ids.into_iter() {
-        let mailxbox = rxs.remove(0);
+        let mailbox = rxs.remove(0);
+        let outbox = txs.remove(0);
 
         std::thread::spawn(move || {
+            let router = Arc::new(outbox);
             if let Err(err) = set_current_thread_priority(ThreadPriority::Max) {
                 eprintln!("Warning: failed to set priority to thread {:?}", err);
             }
@@ -44,12 +48,10 @@ pub fn spawn_threads() -> Vec<Vec<Producer<WorkerMessage>>> {
             let local = LocalSet::new();
 
             // spawn worker / poller
-            local.spawn_local(worker_main(core_id.id, mailxbox));
+            local.spawn_local(worker_main(core_id.id, mailbox));
+            local.spawn_local(spawn_io(router));
 
             rt.block_on(local);
         });
     }
-
-    // return the router
-    txs
 }

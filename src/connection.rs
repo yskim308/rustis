@@ -1,11 +1,17 @@
-use std::{env, sync::Arc};
+use std::{
+    env,
+    net::{self},
+    sync::Arc,
+};
 
 use bytes::BytesMut;
+use rtrb::Producer;
+use socket2::{Domain, Protocol, Socket, Type};
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     net::{
         tcp::{OwnedReadHalf, OwnedWriteHalf},
-        TcpListener, TcpStream,
+        TcpStream,
     },
     sync::mpsc::{UnboundedReceiver, UnboundedSender},
     task,
@@ -17,14 +23,35 @@ use crate::{
     router::route_message,
 };
 
-pub async fn spawn_io(router: Arc<Vec<UnboundedSender<WorkerMessage>>>) -> tokio::io::Result<()> {
+pub async fn spawn_io(router: Arc<Vec<Producer<WorkerMessage>>>) -> tokio::io::Result<()> {
     let args: Vec<String> = env::args().collect();
     let port = args
         .get(1)
         .and_then(|s| s.parse::<u16>().ok())
         .unwrap_or(6379);
     let addr = format!("127.0.0.1:{}", port);
-    let listener = TcpListener::bind(&addr).await?;
+    let std_addr: net::SocketAddr = addr.parse().unwrap();
+    let socket2_addr: socket2::SockAddr = std_addr.into();
+
+    // set up socket (not reuse port only works on unix machines)
+    let socket = Socket::new(Domain::IPV4, Type::STREAM, Some(Protocol::TCP))
+        .expect("failed to create socket2 socket");
+    socket
+        .set_reuse_address(true)
+        .expect("failed to set reuse socket2 address");
+    socket
+        .set_reuse_port(true)
+        .expect("failed to set reuse port");
+    socket
+        .bind(&socket2_addr)
+        .expect("failed to bind to socket2 address");
+    socket.listen(1024);
+
+    let std_listener: net::TcpListener = socket.into();
+    std_listener.set_nonblocking(true).unwrap();
+    let listener = tokio::net::TcpListener::from_std(std_listener)
+        .expect("failed to create async listener from std listener");
+
     println!("Listening on port {port}");
 
     let local = task::LocalSet::new();
@@ -36,12 +63,12 @@ pub async fn spawn_io(router: Arc<Vec<UnboundedSender<WorkerMessage>>>) -> tokio
 
                 let router_clone = router.clone();
                 tokio::task::spawn_local(async move {
-                    if let Err(e) = handle_connection(stream, &router_clone).await {
-                        match e.kind() {
-                            std::io::ErrorKind::ConnectionReset => {}
-                            _ => eprintln!("Error handling connection: {:?}", e),
-                        }
-                    }
+                    // if let Err(e) = handle_connection(stream, &router_clone).await {
+                    //     match e.kind() {
+                    //         std::io::ErrorKind::ConnectionReset => {}
+                    //         _ => eprintln!("Error handling connection: {:?}", e),
+                    //     }
+                    // }
                 });
             }
         })
