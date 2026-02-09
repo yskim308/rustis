@@ -64,11 +64,13 @@ impl ResponseValue {
 
 pub struct WorkerMessage {
     pub seq: u64,
+    pub conn_token: usize,
+    pub src_core: usize,
     pub response_value: ResponseValue,
-    pub tx: Producer<ResponseMessage>,
 }
 
 pub struct ResponseMessage {
     pub seq: u64,
+    pub conn_token: usize,
     pub response_value: ResponseValue,
 }
