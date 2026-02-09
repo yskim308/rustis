@@ -1,7 +1,8 @@
+use core::num;
 use std::sync::Arc;
 
 use core_affinity;
-use rtrb::RingBuffer;
+use rtrb::{Consumer, Producer, RingBuffer};
 use thread_priority::{set_current_thread_priority, ThreadPriority};
 use tokio::task::LocalSet;
 
@@ -54,4 +55,24 @@ pub fn spawn_threads() {
             rt.block_on(local);
         });
     }
+}
+
+fn create_mesh<T>(num_cores: usize) -> (Vec<Vec<Producer<T>>>, Vec<Vec<Consumer<T>>>) {
+    let mut txs = Vec::with_capacity(num_cores);
+    let mut rxs = Vec::with_capacity(num_cores);
+
+    for _ in 0..num_cores {
+        let mut tx_vec = Vec::with_capacity(num_cores);
+        let mut rx_vec = Vec::with_capacity(num_cores);
+
+        for _ in 0..num_cores {
+            let (tx, rx) = RingBuffer::<T>::new(4096);
+            tx_vec.push(tx);
+            rx_vec.push(rx);
+        }
+        txs.push(tx_vec);
+        rxs.push(rx_vec);
+    }
+
+    (txs, rxs)
 }
