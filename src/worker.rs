@@ -3,7 +3,7 @@ use rtrb::{Consumer, Producer};
 use crate::{
     handler::process_command,
     kv::KvStore,
-    message::{ResponseMessage, WorkerMessage},
+    message::{ResponseMessage, ResponseValue, WorkerMessage},
 };
 
 pub async fn worker_main(
@@ -18,7 +18,10 @@ pub async fn worker_main(
 
         for inbox in inboxes.iter_mut() {
             if let Ok(msg) = inbox.pop() {
-                let response = process_command(&kv, msg.response_value);
+                let response = match msg.response_value {
+                    ResponseValue::Array(_) => process_command(&kv, msg.response_value),
+                    _ => msg.response_value,
+                };
                 // note: later, we should be using .get() and handling errors properly
                 resp_outboxes[msg.src_core].push(ResponseMessage {
                     seq: msg.seq,
