@@ -51,12 +51,14 @@ impl MessageRouter {
             }
         };
 
-        destination_worker_queue.push(WorkerMessage {
-            seq,
-            conn_token: self.conn_token,
-            src_core: self.src_core,
-            response_value: frame,
-        });
+        destination_worker_queue
+            .push(WorkerMessage {
+                seq,
+                conn_token: self.conn_token,
+                src_core: self.src_core,
+                response_value: frame,
+            })
+            .unwrap();
     }
 
     fn extract_key(&self, seq: u64, items: &[ResponseValue]) -> Option<bytes::Bytes> {
@@ -100,11 +102,13 @@ impl MessageRouter {
             None => panic!(),
         };
 
-        worker_queue.push(WorkerMessage {
-            seq,
-            conn_token: self.conn_token,
-            src_core: self.src_core,
-            response_value: value,
-        });
+        worker_queue
+            .push(WorkerMessage {
+                seq,
+                conn_token: self.conn_token,
+                src_core: self.src_core,
+                response_value: value,
+            })
+            .unwrap();
     }
 }
