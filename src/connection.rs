@@ -3,27 +3,21 @@ use std::{
     env,
     net::{self},
     rc::Rc,
-    sync::Arc,
 };
 
-use bytes::BytesMut;
+use bytes::{Buf, BytesMut};
 use rtrb::{Consumer, Producer};
 use slab::Slab;
 use socket2::{Domain, Protocol, Socket, Type};
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
-    net::{
-        tcp::{OwnedReadHalf, OwnedWriteHalf},
-        TcpStream,
-    },
-    sync::mpsc::{UnboundedReceiver, UnboundedSender},
-    task,
+    net::tcp::{OwnedReadHalf, OwnedWriteHalf},
 };
 
 use crate::{
     message::{ResponseMessage, ResponseValue, WorkerMessage},
     parser::{parse, BufParseError},
-    router::route_message,
+    router::MessageRouter,
 };
 
 struct ConnectionState {
@@ -50,7 +44,7 @@ impl ConnectionState {
         }
     }
 
-    async fn handle_response(&mut self, seq: u64, value: ResponseValue) {
+    fn enqueue_response(&mut self, seq: u64, value: ResponseValue) {
         let index = seq as usize & (WINDOW_SIZE - 1);
 
         // try to insert
@@ -71,23 +65,16 @@ impl ConnectionState {
                 None => break,
             }
         }
-
-        if !self.write_buffer.is_empty() {
-            if let Err(e) = self.writer.write_all(&self.write_buffer).await {
-                eprintln!("Write error: {}", e);
-            }
-
-            self.write_buffer.clear();
-        }
     }
 }
 
 type ConnectionStore = Rc<RefCell<Slab<ConnectionState>>>;
-type ShardedRouter = Rc<RefCell<Vec<Producer<WorkerMessage>>>>;
+pub type WorkerQueues = Rc<RefCell<Vec<Producer<WorkerMessage>>>>;
 
 pub async fn spawn_io(
-    req_outbox: ShardedRouter,
-    resp_inbox: Vec<Consumer<ResponseMessage>>,
+    core_id: usize,
+    worker_queues: WorkerQueues,
+    io_queues: Vec<Consumer<ResponseMessage>>,
 ) -> tokio::io::Result<()> {
     let args: Vec<String> = env::args().collect();
     let port = args
@@ -110,7 +97,9 @@ pub async fn spawn_io(
     socket
         .bind(&socket2_addr)
         .expect("failed to bind to socket2 address");
-    socket.listen(1024);
+    socket
+        .listen(1024)
+        .expect("failed to listen and set 1024 backlog");
 
     let std_listener: net::TcpListener = socket.into();
     std_listener.set_nonblocking(true).unwrap();
@@ -122,22 +111,29 @@ pub async fn spawn_io(
     // create the registry of connections for this thread
     let connections = Rc::new(RefCell::new(Slab::<ConnectionState>::with_capacity(1024)));
 
-    let local = task::LocalSet::new();
-    Ok(())
-}
+    // spawn the inbox polling task
+    let poller_connections = connections.clone();
+    tokio::task::spawn_local(async move {
+        poll_inboxes(poller_connections, io_queues).await.unwrap();
+    });
 
-async fn handle_connection(stream: TcpStream, router: &ShardedRouter) -> tokio::io::Result<()> {
-    stream.set_nodelay(true)?;
+    // connection accepting loop
+    loop {
+        let (stream, _) = listener.accept().await?;
 
-    let (read_half, write_half) = stream.into_split();
+        let (read_half, write_half) = stream.into_split();
 
-    let (writer_tx, writer_rx) = tokio::sync::mpsc::unbounded_channel();
+        let mut reader_connections = connections.borrow_mut();
 
-    tokio::task::spawn_local(async move { writer_task(write_half, writer_rx).await });
-
-    reader_task(read_half, tx, router).await?;
-
-    Ok(())
+        let token = reader_connections.insert(ConnectionState::new(write_half));
+        let cloned_worker_queues = worker_queues.clone();
+        // pass in token to reader task
+        tokio::task::spawn_local(async move {
+            reader_task(read_half, cloned_worker_queues, token, core_id)
+                .await
+                .unwrap();
+        });
+    }
 }
 
 async fn poll_inboxes(
@@ -146,30 +142,11 @@ async fn poll_inboxes(
 ) -> tokio::io::Result<()> {
     loop {
         let mut progress = false;
+
         for inbox in inboxes.iter_mut() {
             while let Ok(msg) = inbox.pop() {
                 progress = true;
-                let mut store = connections.borrow_mut();
-                // 1. Lookup the connection by Token
-                if let Some(conn) = store.get_mut(msg.conn_token) {
-                    // 2. Buffer the response (to handle out-of-order return)
-                    conn.pending_responses.insert(msg.seq, msg.response_value);
-                    // 3. Write strictly in order
-                    while let Some(val) = conn.pending_responses.remove(&conn.next_seq) {
-                        // Serialize (Zero-copy optimization: do this before loop)
-                        let bytes = val.serialize();
-
-                        // Write to socket
-                        // Note: try_write is better here to avoid await in loop
-                        // but await is safe because we are the only one writing.
-                        if let Err(_) = conn.writer.write_all(&bytes).await {
-                            // Connection died, remove from slab?
-                            // (Handled by the reader usually, or lazy cleanup)
-                        }
-
-                        conn.next_seq += 1;
-                    }
-                }
+                handle_message(msg, &connections);
             }
         }
 
@@ -180,12 +157,39 @@ async fn poll_inboxes(
     }
 }
 
+fn handle_message(msg: ResponseMessage, connections: &ConnectionStore) {
+    let mut connections = connections.borrow_mut();
+    // 1. Lookup the connection by Token
+    if let Some(conn_state) = connections.get_mut(msg.conn_token) {
+        conn_state.enqueue_response(msg.seq, msg.response_value);
+        if !conn_state.write_buffer.is_empty() {
+            write_to_buffer(conn_state);
+        }
+    }
+}
+
+fn write_to_buffer(conn_state: &mut ConnectionState) {
+    match conn_state.writer.try_write(&conn_state.write_buffer) {
+        Ok(n) => {
+            conn_state.write_buffer.advance(n);
+        }
+        Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => {}
+        Err(e) => {
+            eprintln!("Connection died: {}", e);
+        }
+    }
+}
+
 async fn reader_task(
     mut read_half: OwnedReadHalf,
-    tx: UnboundedSender<ResponseMessage>,
-    router: &[UnboundedSender<WorkerMessage>],
+    worker_queues: WorkerQueues,
+    conn_token: usize,
+    core_id: usize,
 ) -> tokio::io::Result<()> {
     let mut read_buffer = BytesMut::with_capacity(64 * 1024);
+
+    // each connection gets their own stateful router
+    let router = MessageRouter::new(worker_queues, conn_token, core_id);
 
     let mut seq: u64 = 0;
     loop {
@@ -198,8 +202,7 @@ async fn reader_task(
             match parse(&mut read_buffer) {
                 Ok(value) => {
                     seq += 1;
-                    let tx_clone = tx.clone();
-                    route_message(router, value, seq, tx_clone);
+                    router.route_message(value, seq);
                 }
                 Err(BufParseError::Incomplete) => {
                     break;
@@ -207,28 +210,21 @@ async fn reader_task(
                 Err(BufParseError::InvalidFirstByte(b)) => {
                     match b {
                         Some(byte) => {
-                            let s = format!("-ERR invalid first byte: {}", byte);
-                            let _ = tx.send(ResponseMessage {
-                                seq,
-                                response_value: ResponseValue::Error(s.into()),
-                            });
+                            let s = format!("ERR invalid first byte: {}", byte);
+                            router.route_message(ResponseValue::Error(s.into()), seq);
                         }
-                        None => {
-                            let _ = tx.send(ResponseMessage {
-                                seq,
-                                response_value: ResponseValue::Error(
-                                    "ERR first byte not found".into(),
-                                ),
-                            });
-                        }
+                        None => router.route_message(
+                            ResponseValue::Error("ERR first byte not found".into()),
+                            seq,
+                        ),
                     };
                     return Ok(()); // Close connection on protocol error
                 }
                 _ => {
-                    let _ = tx.send(ResponseMessage {
+                    router.route_message(
+                        ResponseValue::Error("ERR internal server error".into()),
                         seq,
-                        response_value: ResponseValue::Error("ERR internal server error".into()),
-                    });
+                    );
                     return Ok(()); // Close connection on error
                 }
             }
