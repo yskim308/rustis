@@ -23,11 +23,8 @@ impl MessageRouter {
     pub fn route_message(&self, frame: ResponseValue, seq: u64) {
         let items = match &frame {
             ResponseValue::Array(Some(items)) => items,
-            _ => {
-                self.send_value_directly(
-                    seq,
-                    ResponseValue::Error("sent value must be of type Array".into()),
-                );
+            other => {
+                self.send_value_directly(seq, other.to_owned());
                 return;
             }
         };
