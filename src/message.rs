@@ -1,13 +1,4 @@
 use bytes::{BufMut, Bytes, BytesMut};
-use rtrb::Producer;
-use tokio::sync::{mpsc::UnboundedSender, oneshot};
-
-pub enum ShardRequest {
-    Commmand {
-        args: Vec<Bytes>,
-        response_tx: oneshot::Sender<ResponseValue>,
-    },
-}
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum ResponseValue {

@@ -10,7 +10,7 @@ use rtrb::{Consumer, Producer};
 use slab::Slab;
 use socket2::{Domain, Protocol, Socket, Type};
 use tokio::{
-    io::{AsyncReadExt, AsyncWriteExt},
+    io::AsyncReadExt,
     net::tcp::{OwnedReadHalf, OwnedWriteHalf},
 };
 
