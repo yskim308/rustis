@@ -23,11 +23,13 @@ pub async fn worker_main(
                     _ => msg.response_value,
                 };
                 // note: later, we should be using .get() and handling errors properly
-                resp_outboxes[msg.src_core].push(ResponseMessage {
-                    seq: msg.seq,
-                    conn_token: msg.conn_token,
-                    response_value: response,
-                });
+                resp_outboxes[msg.src_core]
+                    .push(ResponseMessage {
+                        seq: msg.seq,
+                        conn_token: msg.conn_token,
+                        response_value: response,
+                    })
+                    .unwrap();
                 processed = true;
             }
         }
