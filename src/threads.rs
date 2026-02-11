@@ -21,6 +21,8 @@ pub fn spawn_threads() {
     let (mut req_txs, mut req_rxs) = create_mesh::<WorkerMessage>(num_cores);
     let (mut resp_txs, mut resp_rxs) = create_mesh::<ResponseMessage>(num_cores);
 
+    let mut handles = Vec::with_capacity(num_cores);
+
     for core_id in core_ids.into_iter() {
         let req_outbox = req_txs.remove(0);
         let req_inbox = req_rxs.remove(0);
@@ -28,7 +30,7 @@ pub fn spawn_threads() {
         let resp_outbox = resp_txs.remove(0);
         let resp_inbox = resp_rxs.remove(0);
 
-        std::thread::spawn(move || {
+        let handle = std::thread::spawn(move || {
             if let Err(err) = set_current_thread_priority(ThreadPriority::Max) {
                 eprintln!("Warning: failed to set priority to thread {:?}", err);
             }
@@ -53,6 +55,11 @@ pub fn spawn_threads() {
             //
             rt.block_on(local);
         });
+        handles.push(handle);
+    }
+
+    for h in handles {
+        h.join().unwrap();
     }
 }
 
