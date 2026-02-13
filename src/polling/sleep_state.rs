@@ -5,7 +5,9 @@ use std::sync::{
 
 use tokio::sync::Notify;
 
-#[derive(Debug)]
+use crate::polling::config::CooldownConfig;
+
+#[derive(Debug, Default)]
 pub struct SleepState {
     notify: Arc<Notify>,
     is_asleep: AtomicBool,
@@ -13,10 +15,7 @@ pub struct SleepState {
 
 impl SleepState {
     pub fn new() -> Self {
-        Self {
-            notify: Arc::new(Notify::new()),
-            is_asleep: AtomicBool::new(true), // Start asleep
-        }
+        Self::default()
     }
     /// Notify consumer if sleeping, returns true if notification was sent
     pub fn notify_if_asleep(&self) -> bool {
@@ -43,7 +42,6 @@ impl SleepState {
         tokio::select! {
             _ = self.notify.notified() => {
                 // Woken up by notification
-                self.pending_notifications.fetch_sub(1, Ordering::Relaxed);
             }
             _ = tokio::time::sleep(config.active_poll_duration) => {
                 // Cooldown period ended naturally
