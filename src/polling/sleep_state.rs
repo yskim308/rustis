@@ -5,8 +5,6 @@ use std::sync::{
 
 use tokio::sync::Notify;
 
-use crate::polling::config::CooldownConfig;
-
 #[derive(Debug, Default)]
 pub struct SleepState {
     notify: Arc<Notify>,
@@ -19,6 +17,10 @@ impl SleepState {
     }
     /// Notify consumer if sleeping, returns true if notification was sent
     pub fn notify_if_asleep(&self) -> bool {
+        if !self.is_asleep.load(Ordering::Relaxed) {
+            return false;
+        }
+
         let was_asleep = self
             .is_asleep
             .compare_exchange(
@@ -36,16 +38,9 @@ impl SleepState {
     }
 
     /// Mark as sleeping and wait for notification or timeout
-    pub async fn enter_sleep(&self, config: &CooldownConfig) {
+    pub async fn enter_sleep(&self) {
         self.is_asleep.store(true, Ordering::Release);
 
-        tokio::select! {
-            _ = self.notify.notified() => {
-                // Woken up by notification
-            }
-            _ = tokio::time::sleep(config.active_poll_duration) => {
-                // Cooldown period ended naturally
-            }
-        }
+        self.notify.notified().await;
     }
 }
