@@ -1,6 +1,9 @@
 use std::sync::Arc;
 
-use rtrb::{Consumer, Producer, PushError};
+use rtrb::{
+    chunks::{ChunkError, ReadChunk},
+    Consumer, Producer, PushError,
+};
 
 use crate::polling::{config::CooldownConfig, sleep_state::SleepState};
 
@@ -30,35 +33,14 @@ impl<T> NotifiedProducer<T> {
 }
 
 impl<T> NotifiedConsumer<T> {
-    pub async fn poll_loop(&mut self) {
-        loop {
-            let mut has_work = false;
-
-            // Drain available items
-            while let Ok(item) = self.consumer.pop() {
-                has_work = true;
-                self.sleep_state.notify_if_asleep();
-
-                // Process item here (delegate to caller)
-                todo!("figure out how to delegate to caller");
-            }
-
-            if has_work {
-                // Reset idle counter when we have work
-                self.idle_cycles = 0;
-            } else {
-                // Increment idle counter
-                self.idle_cycles += 1;
-
-                // Check if should enter sleep
-                if self.idle_cycles >= self.config.max_idle_cycles {
-                    self.sleep_state.enter_sleep().await;
-                    self.idle_cycles = 0;
-                } else {
-                    // Brief yield before next poll
-                    tokio::task::yield_now().await;
-                }
-            }
+    pub fn read_chunk(&mut self, max_batch: usize) -> Result<ReadChunk<'_, T>, ChunkError> {
+        match self.consumer.read_chunk(max_batch) {
+            Ok(chunk) => Ok(chunk),
+            Err(e) => Err(e),
         }
+    }
+
+    pub fn notify_producer(&mut self) {
+        self.sleep_state.notify_if_asleep();
     }
 }
