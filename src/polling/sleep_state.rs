@@ -29,7 +29,7 @@ impl SleepState {
                 Ordering::AcqRel,
                 Ordering::Relaxed,
             )
-            .unwrap_or(false);
+            .is_ok();
 
         if was_asleep {
             self.notify.notify_one();
