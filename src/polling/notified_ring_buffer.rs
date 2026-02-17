@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use rtrb::{Producer, PushError};
 
-use crate::polling::{config::CooldownConfig, task_notifier::TaskNotifier};
+use crate::polling::task_notifier::TaskNotifier;
 
 #[derive(Debug)]
 pub struct NotifiedProducer<T> {
