@@ -3,6 +3,8 @@ use std::{
     env,
     net::{self},
     rc::Rc,
+    sync::{atomic::Ordering, Arc},
+    task::Poll,
 };
 
 use bytes::{Buf, BytesMut};
@@ -17,6 +19,7 @@ use tokio::{
 use crate::{
     message::{RespFrame, ResponseMessage, WorkerMessage},
     parser::{parse, BufParseError},
+    polling::task_notifier::TaskNotifier,
     router::MessageRouter,
 };
 
@@ -136,46 +139,87 @@ pub async fn spawn_io(
     }
 }
 
-async fn poll_inboxes(
+struct IOInboxPoller {
     connections: ConnectionStore,
-    mut inboxes: Vec<Consumer<ResponseMessage>>,
-) -> tokio::io::Result<()> {
-    loop {
-        let mut progress = false;
+    inboxes: Vec<Consumer<ResponseMessage>>,
+    doorbell: Arc<TaskNotifier>,
+}
 
-        for inbox in inboxes.iter_mut() {
-            while let Ok(msg) = inbox.pop() {
-                progress = true;
-                handle_message(msg, &connections);
+impl Future for IOInboxPoller {
+    type Output = ();
+
+    fn poll(
+        mut self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<Self::Output> {
+        let mut did_work = false;
+
+        for i in 0..self.inboxes.len() {
+            let mut quota = 32;
+
+            while quota > 0 {
+                match self.inboxes[i].pop() {
+                    Ok(msg) => {
+                        did_work = true;
+                        Self::handle_message(msg, &self.connections);
+                    }
+                    Err(_) => break,
+                }
+                quota -= 1;
             }
         }
 
-        if !progress {
-            // Yield to let the Reader Task run
-            tokio::task::yield_now().await;
+        if did_work {
+            return Poll::Pending;
         }
+
+        self.doorbell.waker.register(cx.waker());
+        self.doorbell.is_sleeping.store(true, Ordering::Release);
+
+        for consumer in &self.inboxes {
+            if !consumer.is_empty() {
+                self.doorbell.is_sleeping.store(false, Ordering::Release);
+                return Poll::Pending;
+            }
+        }
+
+        Poll::Pending
     }
 }
 
-fn handle_message(msg: ResponseMessage, connections: &ConnectionStore) {
-    let mut connections = connections.borrow_mut();
-    // 1. Lookup the connection by Token
-    if let Some(conn_state) = connections.get_mut(msg.conn_token) {
-        conn_state.enqueue_response(msg.seq, msg.response_value);
-        if !conn_state.write_buffer.is_empty() {
-            write_to_buffer(conn_state);
+impl IOInboxPoller {
+    pub fn new(
+        connections: ConnectionStore,
+        inboxes: Vec<Consumer<ResponseMessage>>,
+        doorbell: Arc<TaskNotifier>,
+    ) -> Self {
+        IOInboxPoller {
+            connections,
+            inboxes,
+            doorbell,
         }
     }
-}
 
-fn write_to_buffer(conn_state: &mut ConnectionState) {
-    match conn_state.writer.try_write(&conn_state.write_buffer) {
-        Ok(n) => {
-            conn_state.write_buffer.advance(n);
+    fn handle_message(msg: ResponseMessage, connections: &ConnectionStore) {
+        let mut connections = connections.borrow_mut();
+        // 1. Lookup the connection by Token
+        if let Some(conn_state) = connections.get_mut(msg.conn_token) {
+            conn_state.enqueue_response(msg.seq, msg.response_value);
+            if !conn_state.write_buffer.is_empty() {
+                Self::write_to_buffer(conn_state);
+            }
         }
-        Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => {}
-        Err(e) => {
-            eprintln!("Connection died: {}", e);
+    }
+
+    fn write_to_buffer(conn_state: &mut ConnectionState) {
+        match conn_state.writer.try_write(&conn_state.write_buffer) {
+            Ok(n) => {
+                conn_state.write_buffer.advance(n);
+            }
+            Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => {}
+            Err(e) => {
+                eprintln!("Connection died: {}", e);
+            }
         }
     }
 }
