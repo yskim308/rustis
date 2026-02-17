@@ -1,3 +1,3 @@
 pub mod config;
 pub mod notified_ring_buffer;
-pub mod sleep_state;
+pub mod task_notifier;
