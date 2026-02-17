@@ -2,6 +2,7 @@ use futures::task::AtomicWaker;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 #[repr(align(64))]
+#[derive(Debug)]
 pub struct TaskNotifier {
     pub waker: AtomicWaker,
     pub is_sleeping: AtomicBool,
