@@ -1,47 +1,47 @@
 use bytes::{BufMut, Bytes, BytesMut};
 
 #[derive(Debug, PartialEq, Clone)]
-pub enum ResponseValue {
+pub enum RespFrame {
     SimpleString(Bytes),
     Error(Bytes),
     Integer(i64),
     BulkString(Option<Bytes>),
-    Array(Option<Vec<ResponseValue>>),
+    Array(Option<Vec<RespFrame>>),
 }
 
-impl ResponseValue {
+impl RespFrame {
     pub fn serialize(&self, dst: &mut BytesMut) {
         match self {
-            ResponseValue::SimpleString(s) => {
+            RespFrame::SimpleString(s) => {
                 dst.put_u8(b'+');
                 dst.put_slice(s);
                 dst.put_slice(b"\r\n");
             }
-            ResponseValue::Error(msg) => {
+            RespFrame::Error(msg) => {
                 dst.put_u8(b'-');
                 dst.put_slice(msg);
                 dst.put_slice(b"\r\n");
             }
-            ResponseValue::Integer(i) => {
+            RespFrame::Integer(i) => {
                 dst.put_u8(b':');
                 let val_str = i.to_string();
                 dst.put_slice(val_str.as_bytes());
                 dst.put_slice(b"\r\n");
             }
-            ResponseValue::BulkString(None) => {
+            RespFrame::BulkString(None) => {
                 dst.put_slice(b"$-1\r\n");
             }
-            ResponseValue::BulkString(Some(data)) => {
+            RespFrame::BulkString(Some(data)) => {
                 dst.put_u8(b'$');
                 dst.put_slice(data.len().to_string().as_bytes());
                 dst.put_slice(b"\r\n");
                 dst.put_slice(data);
                 dst.put_slice(b"\r\n");
             }
-            ResponseValue::Array(None) => {
+            RespFrame::Array(None) => {
                 dst.put_slice(b"*-1\r\n");
             }
-            ResponseValue::Array(Some(items)) => {
+            RespFrame::Array(Some(items)) => {
                 dst.put_u8(b'*');
                 dst.put_slice(items.len().to_string().as_bytes());
                 dst.put_slice(b"\r\n");
@@ -57,11 +57,11 @@ pub struct WorkerMessage {
     pub seq: u64,
     pub conn_token: usize,
     pub src_core: usize,
-    pub response_value: ResponseValue,
+    pub response_value: RespFrame,
 }
 
 pub struct ResponseMessage {
     pub seq: u64,
     pub conn_token: usize,
-    pub response_value: ResponseValue,
+    pub response_value: RespFrame,
 }

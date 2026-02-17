@@ -1,5 +1,5 @@
 use bytes::Bytes;
-use rustis::message::{ResponseMessage, ResponseValue, WorkerMessage};
+use rustis::message::{RespFrame, ResponseMessage, WorkerMessage};
 use rustis::router::route_message;
 use tokio::sync::mpsc;
 
@@ -31,9 +31,9 @@ async fn test_happy_path_routing() {
     let worker_count = 4;
     let (worker_txs, mut worker_rxs, writer_tx, mut writer_rx) = setup(worker_count);
 
-    let frame = ResponseValue::Array(Some(vec![
-        ResponseValue::BulkString(Some(Bytes::from("GET"))),
-        ResponseValue::BulkString(Some(Bytes::from("user_123"))),
+    let frame = RespFrame::Array(Some(vec![
+        RespFrame::BulkString(Some(Bytes::from("GET"))),
+        RespFrame::BulkString(Some(Bytes::from("user_123"))),
     ]));
 
     // Execute
@@ -60,16 +60,14 @@ async fn test_ping_pong_intercept() {
     let worker_count = 2;
     let (worker_txs, _, writer_tx, mut writer_rx) = setup(worker_count);
 
-    let frame = ResponseValue::Array(Some(vec![ResponseValue::BulkString(Some(Bytes::from(
-        "PING",
-    )))]));
+    let frame = RespFrame::Array(Some(vec![RespFrame::BulkString(Some(Bytes::from("PING")))]));
 
     route_message(&worker_txs, frame, 1, writer_tx);
 
     let response = writer_rx.try_recv().expect("Should receive PONG response");
     // Check the ResponseMessage structure
     match response.response_value {
-        ResponseValue::Error(msg) => {
+        RespFrame::Error(msg) => {
             assert_eq!(msg, "PONG");
         }
         _ => panic!("Expected Error variant with PONG"),
@@ -82,13 +80,13 @@ async fn test_invalid_frame_type() {
     let (worker_txs, _, writer_tx, mut writer_rx) = setup(worker_count);
 
     // Sending a SimpleString where an Array is expected
-    let frame = ResponseValue::SimpleString("I am not an array".into());
+    let frame = RespFrame::SimpleString("I am not an array".into());
 
     route_message(&worker_txs, frame, 1, writer_tx);
 
     let response = writer_rx.try_recv().expect("Should receive error response");
     match response.response_value {
-        ResponseValue::Error(_) => {}
+        RespFrame::Error(_) => {}
         _ => panic!("Expected Error variant"),
     }
 }
@@ -99,15 +97,13 @@ async fn test_missing_key_error() {
     let (worker_txs, _, writer_tx, mut writer_rx) = setup(worker_count);
 
     // Command with no key: ["GET"]
-    let frame = ResponseValue::Array(Some(vec![ResponseValue::BulkString(Some(Bytes::from(
-        "GET",
-    )))]));
+    let frame = RespFrame::Array(Some(vec![RespFrame::BulkString(Some(Bytes::from("GET")))]));
 
     route_message(&worker_txs, frame, 1, writer_tx);
 
     let response = writer_rx.try_recv().expect("Should receive parsing error");
     match response.response_value {
-        ResponseValue::Error(_) => {}
+        RespFrame::Error(_) => {}
         _ => panic!("Expected Error variant"),
     }
 }

@@ -15,14 +15,14 @@ use tokio::{
 };
 
 use crate::{
-    message::{ResponseMessage, ResponseValue, WorkerMessage},
+    message::{RespFrame, ResponseMessage, WorkerMessage},
     parser::{parse, BufParseError},
     router::MessageRouter,
 };
 
 struct ConnectionState {
     writer: OwnedWriteHalf,
-    pending_responses: Vec<Option<ResponseValue>>,
+    pending_responses: Vec<Option<RespFrame>>,
     next_seq: u64,
     write_buffer: BytesMut,
 }
@@ -44,7 +44,7 @@ impl ConnectionState {
         }
     }
 
-    fn enqueue_response(&mut self, seq: u64, value: ResponseValue) {
+    fn enqueue_response(&mut self, seq: u64, value: RespFrame) {
         let index = seq as usize & (WINDOW_SIZE - 1);
 
         // try to insert
@@ -211,20 +211,17 @@ async fn reader_task(
                     match b {
                         Some(byte) => {
                             let s = format!("ERR invalid first byte: {}", byte);
-                            router.route_message(ResponseValue::Error(s.into()), seq);
+                            router.route_message(RespFrame::Error(s.into()), seq);
                         }
                         None => router.route_message(
-                            ResponseValue::Error("ERR first byte not found".into()),
+                            RespFrame::Error("ERR first byte not found".into()),
                             seq,
                         ),
                     };
                     return Ok(()); // Close connection on protocol error
                 }
                 _ => {
-                    router.route_message(
-                        ResponseValue::Error("ERR internal server error".into()),
-                        seq,
-                    );
+                    router.route_message(RespFrame::Error("ERR internal server error".into()), seq);
                     return Ok(()); // Close connection on error
                 }
             }

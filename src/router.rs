@@ -2,7 +2,7 @@ use std::hash::{DefaultHasher, Hash, Hasher};
 
 use crate::{
     connection::WorkerQueues,
-    message::{ResponseValue, WorkerMessage},
+    message::{RespFrame, WorkerMessage},
 };
 
 pub struct MessageRouter {
@@ -20,9 +20,9 @@ impl MessageRouter {
         }
     }
 
-    pub fn route_message(&self, frame: ResponseValue, seq: u64) {
+    pub fn route_message(&self, frame: RespFrame, seq: u64) {
         let items = match &frame {
-            ResponseValue::Array(Some(items)) => items,
+            RespFrame::Array(Some(items)) => items,
             other => {
                 self.send_value_directly(seq, other.to_owned());
                 return;
@@ -30,7 +30,7 @@ impl MessageRouter {
         };
 
         if items.is_empty() {
-            self.send_value_directly(seq, ResponseValue::Error("request is empty".into()));
+            self.send_value_directly(seq, RespFrame::Error("request is empty".into()));
         }
 
         let key = self.extract_key(seq, items);
@@ -45,7 +45,7 @@ impl MessageRouter {
             None => {
                 self.send_value_directly(
                     seq,
-                    ResponseValue::Error("internal server error, invalid worker index".into()),
+                    RespFrame::Error("internal server error, invalid worker index".into()),
                 );
                 return;
             }
@@ -61,33 +61,30 @@ impl MessageRouter {
             .unwrap();
     }
 
-    fn extract_key(&self, seq: u64, items: &[ResponseValue]) -> Option<bytes::Bytes> {
+    fn extract_key(&self, seq: u64, items: &[RespFrame]) -> Option<bytes::Bytes> {
         let (cmd, args) = match items.split_first() {
-            Some((ResponseValue::BulkString(Some(bytes)), rest)) => (bytes, rest),
+            Some((RespFrame::BulkString(Some(bytes)), rest)) => (bytes, rest),
             _ => {
                 self.send_value_directly(
                     seq,
-                    ResponseValue::Error("command must be bulk string".into()),
+                    RespFrame::Error("command must be bulk string".into()),
                 );
                 return None;
             }
         };
 
         if cmd.eq_ignore_ascii_case(b"PING") {
-            self.send_value_directly(seq, ResponseValue::SimpleString("PONG".into()));
+            self.send_value_directly(seq, RespFrame::SimpleString("PONG".into()));
             return None;
         } else if cmd.eq_ignore_ascii_case(b"CONFIG") {
-            self.send_value_directly(seq, ResponseValue::SimpleString("".into()));
+            self.send_value_directly(seq, RespFrame::SimpleString("".into()));
             return None;
         }
 
         let key = match args.first() {
-            Some(ResponseValue::BulkString(Some(bytes))) => bytes,
+            Some(RespFrame::BulkString(Some(bytes))) => bytes,
             _ => {
-                self.send_value_directly(
-                    seq,
-                    ResponseValue::Error("error while parsing key".into()),
-                );
+                self.send_value_directly(seq, RespFrame::Error("error while parsing key".into()));
                 return None;
             }
         };
@@ -95,7 +92,7 @@ impl MessageRouter {
         Some(key.clone())
     }
 
-    fn send_value_directly(&self, seq: u64, value: ResponseValue) {
+    fn send_value_directly(&self, seq: u64, value: RespFrame) {
         let mut worker_queues = self.worker_queues.borrow_mut();
         let worker_queue = match worker_queues.get_mut(self.src_core) {
             Some(queue) => queue,

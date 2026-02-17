@@ -1,4 +1,4 @@
-use crate::message::ResponseValue;
+use crate::message::RespFrame;
 use bytes::{Bytes, BytesMut};
 use memchr::memmem;
 use std::num::ParseIntError;
@@ -29,7 +29,7 @@ fn find_crlf(data: &[u8]) -> Option<usize> {
     memmem::find(data, b"\r\n")
 }
 
-pub fn parse(buffer: &mut BytesMut) -> Result<ResponseValue, BufParseError> {
+pub fn parse(buffer: &mut BytesMut) -> Result<RespFrame, BufParseError> {
     let bytes_needed = peek_bytes_needed(&buffer[..])?;
 
     if buffer.len() < bytes_needed {
@@ -97,7 +97,7 @@ fn peek_array_size(data: &[u8]) -> Result<usize, BufParseError> {
 }
 
 /// Parse a complete frame into a ResponseValue using zero-copy slices
-fn parse_frame(frame: &Bytes) -> Result<ResponseValue, BufParseError> {
+fn parse_frame(frame: &Bytes) -> Result<RespFrame, BufParseError> {
     let (value, consumed) = parse_value_from_frame(frame, 0)?;
 
     debug_assert_eq!(consumed, frame.len());
@@ -109,7 +109,7 @@ fn parse_frame(frame: &Bytes) -> Result<ResponseValue, BufParseError> {
 fn parse_value_from_frame(
     frame: &Bytes,
     offset: usize,
-) -> Result<(ResponseValue, usize), BufParseError> {
+) -> Result<(RespFrame, usize), BufParseError> {
     let data = &frame[offset..];
 
     match data.first() {
@@ -127,7 +127,7 @@ fn parse_value_from_frame(
 fn parse_simple_string_frame(
     frame: &Bytes,
     offset: usize,
-) -> Result<(ResponseValue, usize), BufParseError> {
+) -> Result<(RespFrame, usize), BufParseError> {
     let data = &frame[offset..];
     let header_end = find_crlf(data).ok_or(BufParseError::Incomplete)?;
 
@@ -135,13 +135,13 @@ fn parse_simple_string_frame(
     let string_bytes = frame.slice((offset + 1)..(offset + header_end));
     let bytes_consumed = header_end + 2;
 
-    Ok((ResponseValue::SimpleString(string_bytes), bytes_consumed))
+    Ok((RespFrame::SimpleString(string_bytes), bytes_consumed))
 }
 
 fn parse_simple_error_frame(
     frame: &Bytes,
     offset: usize,
-) -> Result<(ResponseValue, usize), BufParseError> {
+) -> Result<(RespFrame, usize), BufParseError> {
     let data = &frame[offset..];
     let header_end = find_crlf(data).ok_or(BufParseError::Incomplete)?;
 
@@ -149,13 +149,10 @@ fn parse_simple_error_frame(
     let error_bytes = frame.slice((offset + 1)..(offset + header_end));
     let bytes_consumed = header_end + 2;
 
-    Ok((ResponseValue::Error(error_bytes), bytes_consumed))
+    Ok((RespFrame::Error(error_bytes), bytes_consumed))
 }
 
-fn parse_integer_frame(
-    frame: &Bytes,
-    offset: usize,
-) -> Result<(ResponseValue, usize), BufParseError> {
+fn parse_integer_frame(frame: &Bytes, offset: usize) -> Result<(RespFrame, usize), BufParseError> {
     let data = &frame[offset..];
     let header_end = find_crlf(data).ok_or(BufParseError::Incomplete)?;
 
@@ -163,13 +160,13 @@ fn parse_integer_frame(
     let integer_val: i64 = std::str::from_utf8(val_slice)?.parse()?;
     let bytes_consumed = header_end + 2;
 
-    Ok((ResponseValue::Integer(integer_val), bytes_consumed))
+    Ok((RespFrame::Integer(integer_val), bytes_consumed))
 }
 
 fn parse_bulk_string_frame(
     frame: &Bytes,
     offset: usize,
-) -> Result<(ResponseValue, usize), BufParseError> {
+) -> Result<(RespFrame, usize), BufParseError> {
     let data = &frame[offset..];
     let header_end = find_crlf(data).ok_or(BufParseError::Incomplete)?;
 
@@ -178,7 +175,7 @@ fn parse_bulk_string_frame(
 
     if integer_len < 0 {
         let bytes_consumed = header_end + 2;
-        return Ok((ResponseValue::BulkString(None), bytes_consumed));
+        return Ok((RespFrame::BulkString(None), bytes_consumed));
     }
 
     let len = integer_len as usize;
@@ -197,13 +194,10 @@ fn parse_bulk_string_frame(
     // Zero-copy slice! This is the magic - no memcpy
     let string_data = frame.slice(data_start..data_end);
 
-    Ok((ResponseValue::BulkString(Some(string_data)), total_length))
+    Ok((RespFrame::BulkString(Some(string_data)), total_length))
 }
 
-fn parse_inline_frame(
-    frame: &Bytes,
-    offset: usize,
-) -> Result<(ResponseValue, usize), BufParseError> {
+fn parse_inline_frame(frame: &Bytes, offset: usize) -> Result<(RespFrame, usize), BufParseError> {
     let data = &frame[offset..];
     let header_end = find_crlf(data).ok_or(BufParseError::Incomplete)?;
 
@@ -218,7 +212,7 @@ fn parse_inline_frame(
             if let Some(start) = word_start {
                 // Zero-copy slice for each word
                 let word = frame.slice((offset + start)..(offset + i));
-                items.push(ResponseValue::BulkString(Some(word)));
+                items.push(RespFrame::BulkString(Some(word)));
                 word_start = None;
             }
         } else if word_start.is_none() {
@@ -229,18 +223,15 @@ fn parse_inline_frame(
     // Handle final word
     if let Some(start) = word_start {
         let word = frame.slice((offset + start)..(offset + header_end));
-        items.push(ResponseValue::BulkString(Some(word)));
+        items.push(RespFrame::BulkString(Some(word)));
     }
 
     let bytes_consumed = header_end + 2;
 
-    Ok((ResponseValue::Array(Some(items)), bytes_consumed))
+    Ok((RespFrame::Array(Some(items)), bytes_consumed))
 }
 
-fn parse_array_frame(
-    frame: &Bytes,
-    offset: usize,
-) -> Result<(ResponseValue, usize), BufParseError> {
+fn parse_array_frame(frame: &Bytes, offset: usize) -> Result<(RespFrame, usize), BufParseError> {
     let data = &frame[offset..];
     let header_end = find_crlf(data).ok_or(BufParseError::Incomplete)?;
 
@@ -249,7 +240,7 @@ fn parse_array_frame(
 
     if length < 0 {
         let bytes_consumed = header_end + 2;
-        return Ok((ResponseValue::Array(None), bytes_consumed));
+        return Ok((RespFrame::Array(None), bytes_consumed));
     }
 
     let mut local_offset = header_end + 2;
@@ -261,15 +252,15 @@ fn parse_array_frame(
         local_offset += consumed;
     }
 
-    Ok((ResponseValue::Array(Some(items)), local_offset))
+    Ok((RespFrame::Array(Some(items)), local_offset))
 }
 
 // Helper to convert Bytes to &str when needed (e.g., for command handling)
-impl ResponseValue {
+impl RespFrame {
     pub fn as_str(&self) -> Option<&str> {
         match self {
-            ResponseValue::SimpleString(b) | ResponseValue::Error(b) => std::str::from_utf8(b).ok(),
-            ResponseValue::BulkString(Some(b)) => std::str::from_utf8(b).ok(),
+            RespFrame::SimpleString(b) | RespFrame::Error(b) => std::str::from_utf8(b).ok(),
+            RespFrame::BulkString(Some(b)) => std::str::from_utf8(b).ok(),
             _ => None,
         }
     }

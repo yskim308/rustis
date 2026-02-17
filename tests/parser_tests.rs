@@ -1,11 +1,11 @@
 use bytes::BytesMut;
 use rustis::{
-    message::ResponseValue,
+    message::RespFrame,
     parser::{parse, BufParseError},
 };
 
 // Helper to reduce boilerplate
-fn parse_buffer(input: &[u8]) -> Result<ResponseValue, BufParseError> {
+fn parse_buffer(input: &[u8]) -> Result<RespFrame, BufParseError> {
     let mut buf = BytesMut::from(input);
     parse(&mut buf)
 }
@@ -20,7 +20,7 @@ fn test_simple_string_happy_path() {
     let result = parse_buffer(input).unwrap();
 
     match result {
-        ResponseValue::SimpleString(s) => assert_eq!(s, "OK"),
+        RespFrame::SimpleString(s) => assert_eq!(s, "OK"),
         _ => panic!("Expected SimpleString"),
     }
 }
@@ -41,7 +41,7 @@ fn test_simple_string_empty() {
     let result = parse_buffer(input).unwrap();
 
     match result {
-        ResponseValue::SimpleString(s) => assert_eq!(s, ""),
+        RespFrame::SimpleString(s) => assert_eq!(s, ""),
         _ => panic!("Expected Empty SimpleString"),
     }
 }
@@ -56,7 +56,7 @@ fn test_error_happy_path() {
     let result = parse_buffer(input).unwrap();
 
     match result {
-        ResponseValue::Error(s) => assert_eq!(s, "ERR unknown command"),
+        RespFrame::Error(s) => assert_eq!(s, "ERR unknown command"),
         _ => panic!("Expected Error"),
     }
 }
@@ -79,7 +79,7 @@ fn test_integer_happy_path() {
     let result = parse_buffer(input).unwrap();
 
     match result {
-        ResponseValue::Integer(i) => assert_eq!(i, 1000),
+        RespFrame::Integer(i) => assert_eq!(i, 1000),
         _ => panic!("Expected Integer"),
     }
 }
@@ -90,7 +90,7 @@ fn test_integer_negative() {
     let result = parse_buffer(input).unwrap();
 
     match result {
-        ResponseValue::Integer(i) => assert_eq!(i, -42),
+        RespFrame::Integer(i) => assert_eq!(i, -42),
         _ => panic!("Expected Negative Integer"),
     }
 }
@@ -118,7 +118,7 @@ fn test_bulk_string_happy_path() {
     let result = parse_buffer(input).unwrap();
 
     match result {
-        ResponseValue::BulkString(Some(bytes)) => assert_eq!(bytes.as_ref(), b"hello"),
+        RespFrame::BulkString(Some(bytes)) => assert_eq!(bytes.as_ref(), b"hello"),
         _ => panic!("Expected BulkString"),
     }
 }
@@ -130,7 +130,7 @@ fn test_bulk_string_null() {
     let result = parse_buffer(input).unwrap();
 
     match result {
-        ResponseValue::BulkString(None) => {} // Pass
+        RespFrame::BulkString(None) => {} // Pass
         _ => panic!("Expected Null BulkString"),
     }
 }
@@ -167,14 +167,14 @@ fn test_array_happy_path() {
     let result = parse_buffer(input).unwrap();
 
     match result {
-        ResponseValue::Array(Some(items)) => {
+        RespFrame::Array(Some(items)) => {
             assert_eq!(items.len(), 2);
             match &items[0] {
-                ResponseValue::BulkString(Some(b)) => assert_eq!(b.as_ref(), b"foo"),
+                RespFrame::BulkString(Some(b)) => assert_eq!(b.as_ref(), b"foo"),
                 _ => panic!("Item 0 should be BulkString"),
             }
             match &items[1] {
-                ResponseValue::BulkString(Some(b)) => assert_eq!(b.as_ref(), b"bar"),
+                RespFrame::BulkString(Some(b)) => assert_eq!(b.as_ref(), b"bar"),
                 _ => panic!("Item 1 should be BulkString"),
             }
         }
@@ -189,9 +189,9 @@ fn test_array_nested() {
     let input = b"*2\r\n:1\r\n+OK\r\n";
     let result = parse_buffer(input).unwrap();
 
-    if let ResponseValue::Array(Some(items)) = result {
-        assert!(matches!(items[0], ResponseValue::Integer(1)));
-        assert!(matches!(items[1], ResponseValue::SimpleString(_)));
+    if let RespFrame::Array(Some(items)) = result {
+        assert!(matches!(items[0], RespFrame::Integer(1)));
+        assert!(matches!(items[1], RespFrame::SimpleString(_)));
     } else {
         panic!("Expected Mixed Array");
     }
@@ -204,7 +204,7 @@ fn test_array_empty() {
     let result = parse_buffer(input).unwrap();
 
     match result {
-        ResponseValue::Array(Some(items)) => assert!(items.is_empty()),
+        RespFrame::Array(Some(items)) => assert!(items.is_empty()),
         _ => panic!("Expected Empty Array"),
     }
 }
