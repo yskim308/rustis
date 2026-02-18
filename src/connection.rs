@@ -132,7 +132,10 @@ pub async fn spawn_io(
         let mut reader_connections = connections.borrow_mut();
 
         let token = reader_connections.insert(ConnectionState::new(write_half));
-        // println!("connection accepted with token: {}", token);
+
+        #[cfg(debug_assertions)]
+        println!("connection accepted with token: {}", token);
+
         let cloned_worker_queues = worker_queues.clone();
         // pass in token to reader task
         tokio::task::spawn_local(async move {
@@ -209,7 +212,9 @@ impl IOInboxPoller {
     fn handle_message(msg: ResponseMessage, connections: &ConnectionStore) {
         let mut connections = connections.borrow_mut();
         // 1. Lookup the connection by Token
+        #[cfg(debug_assertions)]
         println!("handling message from IO Poller: {:?}", msg);
+
         if let Some(conn_state) = connections.get_mut(msg.conn_token) {
             conn_state.enqueue_response(msg.seq, msg.response_value);
             if !conn_state.write_buffer.is_empty() {
@@ -223,7 +228,9 @@ impl IOInboxPoller {
             match conn_state.writer.try_write(&conn_state.write_buffer) {
                 Ok(0) => break,
                 Ok(n) => {
+                    #[cfg(debug_assertions)]
                     println!("write success");
+
                     conn_state.write_buffer.advance(n);
                 }
                 Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => break,
@@ -257,7 +264,9 @@ async fn reader_task(
         loop {
             match parse(&mut read_buffer) {
                 Ok(value) => {
+                    #[cfg(debug_assertions)]
                     println!("parsed: {:?}", value);
+
                     router.route_message(value, seq);
                     seq += 1;
                 }

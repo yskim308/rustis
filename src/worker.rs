@@ -85,10 +85,15 @@ impl WorkerTask {
     }
 
     fn process_message(&mut self, msg: WorkerMessage) {
+        #[cfg(debug_assertions)]
+        println!("msg: {:?} processed", msg);
         let response = match msg.response_value {
             RespFrame::Array(_) => process_command(&self.kv, msg.response_value),
             _ => msg.response_value,
         };
+
+        #[cfg(debug_assertions)]
+        println!("sending response: {:?} to core {}", response, msg.src_core);
         // note: later, we should be using .get() and handling errors properly
         self.to_writer[msg.src_core]
             .push_with_notify(ResponseMessage {

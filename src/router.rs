@@ -52,6 +52,11 @@ impl MessageRouter {
             }
         };
 
+        #[cfg(debug_assertions)]
+        println!(
+            "sending message to worker {} with frame: {:?}",
+            to_worker, frame
+        );
         destination_worker_queue
             .push_with_notify(WorkerMessage {
                 seq,
