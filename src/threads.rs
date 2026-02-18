@@ -95,21 +95,22 @@ fn create_mesh<T>(
     num_cores: usize,
     doorbells: &[Arc<TaskNotifier>],
 ) -> (ProducerMesh<T>, ConsumerMesh<T>) {
-    let mut txs = Vec::with_capacity(num_cores);
-    let mut rxs = Vec::with_capacity(num_cores);
+    let mut txs: ProducerMesh<T> = Vec::with_capacity(num_cores);
+    let mut rxs: ConsumerMesh<T> = Vec::with_capacity(num_cores);
 
     for _ in 0..num_cores {
-        let mut tx_vec = Vec::with_capacity(num_cores);
-        let mut rx_vec = Vec::with_capacity(num_cores);
-
-        for doorbell in doorbells.iter().take(num_cores) {
-            let (tx, rx) = RingBuffer::<T>::new(4096);
-            tx_vec.push(NotifiedProducer::new(tx, Arc::clone(doorbell)));
-            rx_vec.push(rx);
-        }
-        txs.push(tx_vec);
-        rxs.push(rx_vec);
+        txs.push(Vec::with_capacity(num_cores));
+        rxs.push(Vec::with_capacity(num_cores));
     }
+
+    // Build a mesh where txs[src][dst] pairs with rxs[dst][src].
+    (0..num_cores).for_each(|src| {
+        for dst in 0..num_cores {
+            let (tx, rx) = RingBuffer::<T>::new(4096);
+            txs[src].push(NotifiedProducer::new(tx, Arc::clone(&doorbells[dst])));
+            rxs[dst].push(rx);
+        }
+    });
 
     (txs, rxs)
 }
