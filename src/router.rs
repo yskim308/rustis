@@ -31,9 +31,13 @@ impl MessageRouter {
 
         if items.is_empty() {
             self.send_value_directly(seq, RespFrame::Error("request is empty".into()));
+            return;
         }
 
         let key = self.extract_key(seq, items);
+        if key.is_none() {
+            return;
+        }
 
         let mut worker_queues = self.worker_queues.borrow_mut();
         let mut hasher = DefaultHasher::new();
