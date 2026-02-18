@@ -68,7 +68,12 @@ impl MessageRouter {
                 src_core: self.src_core,
                 response_value: frame,
             })
-            .unwrap();
+            .unwrap_or_else(|err| {
+                eprintln!(
+                    "router push failed (conn {}, seq {}): {:?}",
+                    self.conn_token, seq, err
+                );
+            });
     }
 
     fn extract_key(&self, seq: u64, items: &[RespFrame]) -> Option<bytes::Bytes> {
@@ -116,6 +121,11 @@ impl MessageRouter {
                 src_core: self.src_core,
                 response_value: value,
             })
-            .unwrap();
+            .unwrap_or_else(|err| {
+                eprintln!(
+                    "router direct push failed (conn {}, seq {}): {:?}",
+                    self.conn_token, seq, err
+                );
+            });
     }
 }
