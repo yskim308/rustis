@@ -182,6 +182,22 @@ impl Future for IOInboxPoller {
             return Poll::Pending;
         }
 
+        // No new messages, but we may still have buffered writes to flush.
+        let mut needs_flush = false;
+        {
+            let mut connections = self.connections.borrow_mut();
+            for (_, conn_state) in connections.iter_mut() {
+                if !conn_state.write_buffer.is_empty() {
+                    needs_flush = true;
+                    Self::write_to_buffer(conn_state);
+                }
+            }
+        }
+        if needs_flush {
+            cx.waker().wake_by_ref();
+            return Poll::Pending;
+        }
+
         self.doorbell.waker.register(cx.waker());
         self.doorbell.is_sleeping.store(true, Ordering::Release);
 
