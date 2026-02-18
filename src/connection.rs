@@ -139,9 +139,9 @@ pub async fn spawn_io(
         let cloned_worker_queues = worker_queues.clone();
         // pass in token to reader task
         tokio::task::spawn_local(async move {
-            reader_task(read_half, cloned_worker_queues, token, core_id)
-                .await
-                .unwrap();
+            if let Err(err) = reader_task(read_half, cloned_worker_queues, token, core_id).await {
+                eprintln!("reader_task error (conn {token}): {err}");
+            }
         });
     }
 }
