@@ -53,6 +53,7 @@ impl RespFrame {
     }
 }
 
+#[derive(Debug)]
 pub struct WorkerMessage {
     pub seq: u64,
     pub conn_token: usize,
@@ -60,6 +61,7 @@ pub struct WorkerMessage {
     pub response_value: RespFrame,
 }
 
+#[derive(Debug)]
 pub struct ResponseMessage {
     pub seq: u64,
     pub conn_token: usize,
