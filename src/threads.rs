@@ -1,8 +1,7 @@
 use std::{cell::RefCell, rc::Rc, sync::Arc};
 
 use core_affinity;
-use crossbeam::deque::Worker;
-use rtrb::{Consumer, Producer, RingBuffer};
+use rtrb::{Consumer, RingBuffer};
 use thread_priority::{set_current_thread_priority, ThreadPriority};
 use tokio::task::LocalSet;
 
@@ -10,7 +9,7 @@ use crate::{
     connection::spawn_io,
     message::{ResponseMessage, WorkerMessage},
     polling::{notified_ring_buffer::NotifiedProducer, task_notifier::TaskNotifier},
-    worker::{self, WorkerTask},
+    worker::WorkerTask,
 };
 
 pub type ProducerMesh<T> = Vec<Vec<NotifiedProducer<T>>>;
@@ -94,7 +93,7 @@ fn create_doorbells(num_cores: usize) -> Vec<Arc<TaskNotifier>> {
 
 fn create_mesh<T>(
     num_cores: usize,
-    doorbells: &Vec<Arc<TaskNotifier>>,
+    doorbells: &[Arc<TaskNotifier>],
 ) -> (ProducerMesh<T>, ConsumerMesh<T>) {
     let mut txs = Vec::with_capacity(num_cores);
     let mut rxs = Vec::with_capacity(num_cores);
@@ -103,10 +102,9 @@ fn create_mesh<T>(
         let mut tx_vec = Vec::with_capacity(num_cores);
         let mut rx_vec = Vec::with_capacity(num_cores);
 
-        for i in 0..num_cores {
-            let cloned_doorbell = doorbells[i].clone();
+        for doorbell in doorbells.iter().take(num_cores) {
             let (tx, rx) = RingBuffer::<T>::new(4096);
-            tx_vec.push(NotifiedProducer::new(tx, cloned_doorbell));
+            tx_vec.push(NotifiedProducer::new(tx, Arc::clone(doorbell)));
             rx_vec.push(rx);
         }
         txs.push(tx_vec);

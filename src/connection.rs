@@ -8,7 +8,7 @@ use std::{
 };
 
 use bytes::{Buf, BytesMut};
-use rtrb::{Consumer, Producer};
+use rtrb::Consumer;
 use slab::Slab;
 use socket2::{Domain, Protocol, Socket, Type};
 use tokio::{

@@ -27,3 +27,9 @@ impl TaskNotifier {
         }
     }
 }
+
+impl Default for TaskNotifier {
+    fn default() -> Self {
+        Self::new()
+    }
+}

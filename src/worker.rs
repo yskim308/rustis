@@ -13,7 +13,7 @@ use crate::{
 };
 
 pub struct WorkerTask {
-    worker_id: usize,
+    _worker_id: usize,
     inboxes: Vec<Consumer<WorkerMessage>>,
     to_writer: Vec<NotifiedProducer<ResponseMessage>>,
     doorbell: Arc<TaskNotifier>,
@@ -76,7 +76,7 @@ impl WorkerTask {
     ) -> Self {
         let kv = KvStore::new();
         WorkerTask {
-            worker_id,
+            _worker_id: worker_id,
             inboxes,
             to_writer,
             doorbell,
