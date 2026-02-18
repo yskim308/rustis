@@ -101,6 +101,11 @@ impl WorkerTask {
                 conn_token: msg.conn_token,
                 response_value: response,
             })
-            .unwrap();
+            .unwrap_or_else(|err| {
+                eprintln!(
+                    "worker response push failed (conn {}, seq {}): {:?}",
+                    msg.conn_token, msg.seq, err
+                );
+            });
     }
 }
