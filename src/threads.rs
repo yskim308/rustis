@@ -106,7 +106,7 @@ fn create_mesh<T>(
     // Build a mesh where txs[src][dst] pairs with rxs[dst][src].
     (0..num_cores).for_each(|src| {
         for dst in 0..num_cores {
-            let (tx, rx) = RingBuffer::<T>::new(4096);
+            let (tx, rx) = RingBuffer::<T>::new(65536);
             txs[src].push(NotifiedProducer::new(tx, Arc::clone(&doorbells[dst])));
             rxs[dst].push(rx);
         }
