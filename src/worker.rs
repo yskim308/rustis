@@ -46,17 +46,19 @@ impl Future for WorkerTask {
 
         // if work is processed, we're hot, yield but do NOT sleep (yield to runtime)
         if did_work {
+            cx.waker().wake_by_ref();
             return Poll::Pending;
         }
 
         // go to sleep, only wake by manual wakeup
-        self.doorbell.waker.register(cx.waker());
         self.doorbell.is_sleeping.store(true, Ordering::Release);
+        self.doorbell.waker.register(cx.waker());
 
         // final check, if anything in inbox, cancel sleep and yield to runtime
         for consumer in &self.inboxes {
             if !consumer.is_empty() {
                 self.doorbell.is_sleeping.store(false, Ordering::Release);
+                cx.waker().wake_by_ref();
                 return Poll::Pending;
             }
         }
