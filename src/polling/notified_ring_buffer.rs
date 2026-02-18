@@ -11,6 +11,13 @@ pub struct NotifiedProducer<T> {
 }
 
 impl<T> NotifiedProducer<T> {
+    pub fn new(producer: Producer<T>, consumer_notifier: Arc<TaskNotifier>) -> Self {
+        NotifiedProducer {
+            producer,
+            consumer_notifier,
+        }
+    }
+
     pub fn push_with_notify(&mut self, item: T) -> Result<(), PushError<T>> {
         self.producer.push(item)?;
 
