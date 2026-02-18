@@ -19,7 +19,7 @@ use tokio::{
 use crate::{
     message::{RespFrame, ResponseMessage, WorkerMessage},
     parser::{parse, BufParseError},
-    polling::task_notifier::TaskNotifier,
+    polling::{notified_ring_buffer::NotifiedProducer, task_notifier::TaskNotifier},
     router::MessageRouter,
 };
 
@@ -72,7 +72,7 @@ impl ConnectionState {
 }
 
 type ConnectionStore = Rc<RefCell<Slab<ConnectionState>>>;
-pub type WorkerQueues = Rc<RefCell<Vec<Producer<WorkerMessage>>>>;
+pub type WorkerQueues = Rc<RefCell<Vec<NotifiedProducer<WorkerMessage>>>>;
 
 pub async fn spawn_io(
     core_id: usize,

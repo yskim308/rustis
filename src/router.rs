@@ -42,6 +42,7 @@ impl MessageRouter {
 
         let destination_worker_queue = match worker_queues.get_mut(to_worker) {
             Some(queue) => queue,
+
             None => {
                 self.send_value_directly(
                     seq,
@@ -52,7 +53,7 @@ impl MessageRouter {
         };
 
         destination_worker_queue
-            .push(WorkerMessage {
+            .push_with_notify(WorkerMessage {
                 seq,
                 conn_token: self.conn_token,
                 src_core: self.src_core,
@@ -100,7 +101,7 @@ impl MessageRouter {
         };
 
         worker_queue
-            .push(WorkerMessage {
+            .push_with_notify(WorkerMessage {
                 seq,
                 conn_token: self.conn_token,
                 src_core: self.src_core,
