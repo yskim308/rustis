@@ -78,6 +78,7 @@ pub async fn spawn_io(
     core_id: usize,
     worker_queues: WorkerQueues,
     io_queues: Vec<Consumer<ResponseMessage>>,
+    io_doorbell: Arc<TaskNotifier>,
 ) -> tokio::io::Result<()> {
     let args: Vec<String> = env::args().collect();
     let port = args
@@ -116,9 +117,11 @@ pub async fn spawn_io(
 
     // spawn the inbox polling task
     let poller_connections = connections.clone();
-    tokio::task::spawn_local(async move {
-        poll_inboxes(poller_connections, io_queues).await.unwrap();
-    });
+    tokio::task::spawn_local(IOInboxPoller::new(
+        poller_connections,
+        io_queues,
+        io_doorbell,
+    ));
 
     // connection accepting loop
     loop {
