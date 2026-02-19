@@ -93,3 +93,15 @@ Timestamp,Git Hash,Note,Test Name,Command,RPS,Latency (p50)
 2026-02-05 13:46:43,e744423,multithread_v1,High Concurrency & Throughput (Mixed),SPOP,1540832.12,21.183
 2026-02-05 13:46:48,e744423,multithread_v1,Heavy Payload Saturation (4KB),SET,392156.88,37.759
 2026-02-05 13:46:48,e744423,multithread_v1,Heavy Payload Saturation (4KB),GET,373692.06,39.423
+2026-02-19 16:54:13,5c3af92,multithread_v2,Quick Sanity Check,INLINE,142857.14,0.183
+2026-02-19 16:54:13,5c3af92,multithread_v2,Quick Sanity Check,MBULK,71428.57,0.711
+2026-02-19 16:54:17,5c3af92,multithread_v2,Regular Load (Baseline),SET,183992.64,0.143
+2026-02-19 16:54:17,5c3af92,multithread_v2,Regular Load (Baseline),GET,187969.92,0.143
+2026-02-19 16:54:34,5c3af92,multithread_v2,High Concurrency & Throughput (Mixed),SET,798084.56,64.671
+2026-02-19 16:54:34,5c3af92,multithread_v2,High Concurrency & Throughput (Mixed),GET,818330.62,63.679
+2026-02-19 16:54:34,5c3af92,multithread_v2,High Concurrency & Throughput (Mixed),LPUSH,1297016.88,45.503
+2026-02-19 16:54:34,5c3af92,multithread_v2,High Concurrency & Throughput (Mixed),LPOP,1295336.75,46.239
+2026-02-19 16:54:34,5c3af92,multithread_v2,High Concurrency & Throughput (Mixed),SADD,1058201.12,57.439
+2026-02-19 16:54:34,5c3af92,multithread_v2,High Concurrency & Throughput (Mixed),SPOP,965250.94,46.783
+2026-02-19 16:54:39,5c3af92,multithread_v2,Heavy Payload Saturation (4KB),SET,481695.56,15.719
+2026-02-19 16:54:39,5c3af92,multithread_v2,Heavy Payload Saturation (4KB),GET,447627.59,23.359
