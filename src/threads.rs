@@ -9,6 +9,7 @@ use crate::{
     connection::spawn_io,
     message::{ResponseMessage, WorkerMessage},
     polling::{notified_ring_buffer::NotifiedProducer, task_notifier::TaskNotifier},
+    shard_executor::{self, ShardExecutor},
     worker::WorkerTask,
 };
 
@@ -56,12 +57,17 @@ pub fn spawn_threads() {
             // this router will be shared by all connections, wrap in Rc<RefCell<>>
             let sharded_router = Rc::new(RefCell::new(req_outbox));
 
-            // // spawn worker / poller
+            // each core gets its shard executor, reader / writer share it
+            let shard_executor = Rc::new(RefCell::new(ShardExecutor::new()));
+
+            let worker_shard_executor = shard_executor.clone();
+            // spawn worker / poller
             local.spawn_local(WorkerTask::new(
                 core_id.id,
                 req_inbox,
                 resp_outbox,
                 worker_doorbell,
+                worker_shard_executor,
             ));
 
             local.spawn_local(spawn_io(
