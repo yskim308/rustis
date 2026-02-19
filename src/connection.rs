@@ -21,7 +21,7 @@ use crate::{
     parser::{parse, BufParseError},
     polling::{notified_ring_buffer::NotifiedProducer, task_notifier::TaskNotifier},
     router::MessageRouter,
-    shard_executor::{self, ShardExecutor},
+    shard_executor::ShardExecutor,
 };
 
 struct ConnectionState {

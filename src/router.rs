@@ -7,7 +7,7 @@ use std::{
 use crate::{
     connection::WorkerQueues,
     message::{RespFrame, WorkerMessage},
-    shard_executor::{self, ShardExecutor},
+    shard_executor::ShardExecutor,
 };
 
 pub struct MessageRouter {

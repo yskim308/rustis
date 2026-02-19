@@ -8,8 +8,7 @@ use std::{
 use rtrb::Consumer;
 
 use crate::{
-    handler::process_command,
-    message::{RespFrame, ResponseMessage, WorkerMessage},
+    message::{ResponseMessage, WorkerMessage},
     polling::{notified_ring_buffer::NotifiedProducer, task_notifier::TaskNotifier},
     shard_executor::ShardExecutor,
 };

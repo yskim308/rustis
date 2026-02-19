@@ -9,7 +9,7 @@ use crate::{
     connection::spawn_io,
     message::{ResponseMessage, WorkerMessage},
     polling::{notified_ring_buffer::NotifiedProducer, task_notifier::TaskNotifier},
-    shard_executor::{self, ShardExecutor},
+    shard_executor::ShardExecutor,
     worker::WorkerTask,
 };
 
