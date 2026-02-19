@@ -104,83 +104,77 @@ Currently the following commands are supported:
 
 # Code Architecture
 
-- we are using a fan-out / fan-in model 
+- current model is **N-thread sharded execution**, where `N = number of CPU cores`
 
-1. an async thread (single-threaded) IO thread is spawned, and each thread has a asynchronous worker and writer task (each connection gets a thread)
+1. `main -> spawn_threads()` creates one OS thread per core (core-pinned on Linux, max priority when available)
 
-2. N synchronous threads (where N = # of cpu cores) 
+2. each core thread creates:
+   - a single-thread Tokio runtime (`LocalSet`)
+   - one local `WorkerTask` with its own `KvStore` shard
+   - one local I/O task (`spawn_io`) that accepts and manages TCP connections for that core
 
-3. `reader_task` parses, and then hands it off to `router.rs`
+3. request/response transport is a **full mesh** of bounded lock-free ring buffers (`rtrb`):
+   - request mesh: `req_txs[src][dst]` / `req_rxs[dst][src]` for `WorkerMessage`
+   - response mesh: `resp_txs[src][dst]` / `resp_rxs[dst][src]` for `ResponseMessage`
+   - each destination side has a `TaskNotifier` doorbell for wakeups
 
-4. `router.rs` checks the key, hashes it, and then hands the parsed response to the worker that owns that hash through the mpsc channel 
+4. in each connection `reader_task`:
+   - parses RESP frames (`parser.rs`)
+   - attaches a per-connection `seq` number
+   - routes via `router.rs`
 
-5. the worker processes and interacts with its owned key-value store, and then sends the response value to the writer task
+5. routing behavior (`MessageRouter`):
+   - command key is hashed to pick destination worker shard
+   - keyed commands (`GET/SET/...`) go to owning worker core
+   - direct replies (e.g. `PING`, protocol errors, malformed input) are sent to the source core's worker queue
 
-6. `writer_task` is awaiting on its tx and orders the responses according to the `seq` values, then writes 
+6. worker behavior (`worker.rs`):
+   - polls all inbound request queues for that worker core
+   - executes command handlers against its local shard (`handler.rs` + `kv.rs`)
+   - sends `ResponseMessage` back to the originating I/O core (`src_core`)
+
+7. response write path (`IOInboxPoller` in `connection.rs`):
+   - polls all inbound response queues for that I/O core
+   - maps `conn_token -> ConnectionState`
+   - enqueues responses by `seq` and flushes in order
+   - uses a fixed ordering window (`WINDOW_SIZE = 1024`) to preserve pipeline ordering
 
 ```mermaid
-graph LR
-    Client[Client] -->|TCP| Reader[Reader Task<br/>Parse RESP]
-    
-    Reader --> Router[Router<br/>hash key % N]
-    
-    Router -->|mpsc| W0[Worker 0<br/>KV Shard 0]
-    Router -->|mpsc| W1[Worker 1<br/>KV Shard 1]
-    Router -->|mpsc| WN[Worker N<br/>KV Shard N]
-    
-    W0 -->|mpsc<br/>+ seq| Writer[Writer Task<br/>Order & Send]
-    W1 -->|mpsc<br/>+ seq| Writer
-    WN -->|mpsc<br/>+ seq| Writer
-    
-    Writer -->|TCP| Client
+flowchart TD
+    Client[Clients] -->|TCP + SO_REUSEPORT| IO0[IO Task Core 0]
+    Client -->|TCP + SO_REUSEPORT| IOi[IO Task Core i]
+    Client -->|TCP + SO_REUSEPORT| ION[IO Task Core N]
+
+    subgraph Core_i[Core i Runtime]
+        Reader[reader_task<br/>parse + seq] --> Router[MessageRouter<br/>hash key to shard]
+        Router -->|req queue| Wi[Worker i<br/>KV shard i]
+        Router -->|req queue| Wj[Worker j<br/>KV shard j]
+        Wi -->|resp queue to src core| Poller[IOInboxPoller<br/>order by seq + write]
+        Wj -->|resp queue to src core| Poller
+    end
+
+    IOi --> Reader
+    Poller -->|TCP write| Client
 ```
 
-## Drawbacks / Performance Penalties 
+## Current Tradeoffs
 
-we are *much* worse than single-threaded because 
+- every request still crosses async task + queue boundaries (`reader -> router -> worker -> io writer`)
+- cross-core routing for non-local keys adds queue traffic and wakeup overhead
+- preserving per-connection ordering adds buffering and sequencing work on the write side
+- bounded queues and fixed response windows require backpressure discipline under extreme pipelining
 
-- the overhead for synchronization between threads is very high (synch overhead for **every** request adds up)
+This is no longer a single coordinator-thread fan-in/fan-out design; it is a per-core runtime with sharded state and cross-core message passing.
 
-- cache line bouncing because of the shared memory structures (MPSC internals, message data bouncing around threads, sequence number tracking)
+### Future Optimizations (multithread_V3)
 
-- Head-of-line blocking if a worker that owns the cache is busy 
+**Major Changes**:
+- allow for local execution on keys that hash to the same core 
+- pass function pointers instead of actual values to avoid mallocing everywhere 
+- batch operations, avoid multiple wakeups / round trips
+- avoid key / value cloning in hot paths, keep borrowed values as long as possible 
 
-- coordinator thread can become the bottleneck
-
-Meanwhile, the single-threaded iteration avoided all of these problems
-
-- No sync overhead 
-
-- No channel communication penalties
-
-- perfect cache locality, and no context switching 
-
-We are getting the worst parts of both single-thread *and* multi-threading because 
-
-1. IO is still serializing all coordinatio 
-
-2. each request pays the a big round trip penalty (io -> worker -> io)
-
-3. pipelining doesn't really work well with workers 
-
-4. each redis request is small, so the work 'unit' doesn't justify the cost of coordination
-
-### Next Steps 
-
-I will look to implement true shared-nothing architecture, dragonflyDB style where: 
-
-- we spawn N threads for N cores 
-
-- each thread actually owns its own IO 
-
-- essentially N single-threaded versions running 
-
-This should avoid: 
-
-- sync overhead -> Only if keys do not belong to a thread will there be communication, but not for every requeset
-
-- cache line bouncing -> no shared memeory structures, especially the MPSC internals 
-
-- coordinator thread will not be a bottleneck because each thread is responsible for their own read and writes 
-
-Gotta follow **KISS**: keep it simple, stupid. I learned a lot from implementing this actor model, but ultimately the complexity actually makes it worse! 
+**Minor Changes**:
+- pass in hashed values into hashmap, avoid hashing twice 
+- command dispatch table instead of if-else or branching 
+- networking: use vectored writes and check that SO_REUSEPORT is actually even / fair 
