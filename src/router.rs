@@ -43,6 +43,9 @@ impl MessageRouter {
         let mut hasher = DefaultHasher::new();
         key.hash(&mut hasher);
         let to_worker = hasher.finish() as usize % worker_queues.len();
+        if to_worker == self.src_core {
+            println!("this message could have been locally executed");
+        }
 
         let destination_worker_queue = match worker_queues.get_mut(to_worker) {
             Some(queue) => queue,

@@ -16,7 +16,7 @@ pub type ProducerMesh<T> = Vec<Vec<NotifiedProducer<T>>>;
 pub type ConsumerMesh<T> = Vec<Vec<Consumer<T>>>;
 
 pub fn spawn_threads() {
-    let core_ids = core_affinity::get_core_ids().unwrap();
+    let core_ids = core_affinity::get_core_ids().expect("failed to get coreIDs with core_affinity");
     let num_cores = core_ids.len();
 
     let mut worker_doorbells = create_doorbells(num_cores);
@@ -49,7 +49,7 @@ pub fn spawn_threads() {
             let rt = tokio::runtime::Builder::new_current_thread()
                 .enable_all()
                 .build()
-                .unwrap();
+                .expect("failed to build tokio current_thread runtime");
 
             let local = LocalSet::new();
 
@@ -77,7 +77,7 @@ pub fn spawn_threads() {
     }
 
     for h in handles {
-        h.join().unwrap();
+        h.join().expect("failed while joining on handles");
     }
 }
 

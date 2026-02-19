@@ -86,7 +86,9 @@ pub async fn spawn_io(
         .and_then(|s| s.parse::<u16>().ok())
         .unwrap_or(6379);
     let addr = format!("127.0.0.1:{}", port);
-    let std_addr: net::SocketAddr = addr.parse().unwrap();
+    let std_addr: net::SocketAddr = addr
+        .parse()
+        .expect("failure while parsing address for socket");
     let socket2_addr: socket2::SockAddr = std_addr.into();
 
     // set up socket (note: reuse port only works on unix machines)
@@ -106,7 +108,9 @@ pub async fn spawn_io(
         .expect("failed to listen and set 1024 backlog");
 
     let std_listener: net::TcpListener = socket.into();
-    std_listener.set_nonblocking(true).unwrap();
+    std_listener
+        .set_nonblocking(true)
+        .expect("failed while setting TCP litener to non blocking");
     let listener = tokio::net::TcpListener::from_std(std_listener)
         .expect("failed to create async listener from std listener");
 
