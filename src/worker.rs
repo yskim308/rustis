@@ -1,4 +1,6 @@
 use std::{
+    cell::RefCell,
+    rc::Rc,
     sync::{atomic::Ordering, Arc},
     task::Poll,
 };
@@ -7,9 +9,9 @@ use rtrb::Consumer;
 
 use crate::{
     handler::process_command,
-    kv::KvStore,
     message::{RespFrame, ResponseMessage, WorkerMessage},
     polling::{notified_ring_buffer::NotifiedProducer, task_notifier::TaskNotifier},
+    shard_executor::ShardExecutor,
 };
 
 pub struct WorkerTask {
@@ -17,7 +19,7 @@ pub struct WorkerTask {
     inboxes: Vec<Consumer<WorkerMessage>>,
     to_writer: Vec<NotifiedProducer<ResponseMessage>>,
     doorbell: Arc<TaskNotifier>,
-    kv: KvStore,
+    shard_executor: Rc<RefCell<ShardExecutor>>,
 }
 
 impl Future for WorkerTask {
@@ -73,25 +75,24 @@ impl WorkerTask {
         inboxes: Vec<Consumer<WorkerMessage>>,
         to_writer: Vec<NotifiedProducer<ResponseMessage>>,
         doorbell: Arc<TaskNotifier>,
+        shard_executor: Rc<RefCell<ShardExecutor>>,
     ) -> Self {
-        let kv = KvStore::new();
         WorkerTask {
             _worker_id: worker_id,
             inboxes,
             to_writer,
             doorbell,
-            kv,
+            shard_executor,
         }
     }
 
     fn process_message(&mut self, msg: WorkerMessage) {
         #[cfg(debug_assertions)]
         println!("msg: {:?} processed", msg);
-        let response = match msg.response_value {
-            RespFrame::Array(_) => process_command(&self.kv, msg.response_value),
-            _ => msg.response_value,
-        };
-
+        let response = self
+            .shard_executor
+            .borrow_mut()
+            .process_message(msg.response_value);
         #[cfg(debug_assertions)]
         println!("sending response: {:?} to core {}", response, msg.src_core);
         // note: later, we should be using .get() and handling errors properly

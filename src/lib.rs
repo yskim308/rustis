@@ -5,5 +5,6 @@ pub mod message;
 pub mod parser;
 pub mod polling;
 pub mod router;
+pub mod shard_executor;
 pub mod threads;
 pub mod worker;
