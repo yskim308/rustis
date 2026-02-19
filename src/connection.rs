@@ -113,7 +113,7 @@ pub async fn spawn_io(
     println!("Listening on port {port}");
 
     // create the registry of connections for this thread
-    let connections = Rc::new(RefCell::new(Slab::<ConnectionState>::with_capacity(1024)));
+    let connections = Rc::new(RefCell::new(Slab::<ConnectionState>::with_capacity(8192)));
 
     // spawn the inbox polling task
     let poller_connections = connections.clone();
