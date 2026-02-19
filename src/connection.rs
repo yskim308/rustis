@@ -144,11 +144,13 @@ pub async fn spawn_io(
         println!("connection accepted with token: {}", token);
 
         let cloned_worker_queues = worker_queues.clone();
+        let cloned_connections = connections.clone();
         // pass in token to reader task
         tokio::task::spawn_local(async move {
             if let Err(err) = reader_task(read_half, cloned_worker_queues, token, core_id).await {
                 eprintln!("reader_task error (conn {token}): {err}");
             }
+            cloned_connections.borrow_mut().remove(token);
         });
     }
 }
