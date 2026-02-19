@@ -135,9 +135,10 @@ pub async fn spawn_io(
 
         let (read_half, write_half) = stream.into_split();
 
-        let mut reader_connections = connections.borrow_mut();
-
-        let token = reader_connections.insert(ConnectionState::new(write_half));
+        let token = {
+            let mut reader_connections = connections.borrow_mut();
+            reader_connections.insert(ConnectionState::new(write_half))
+        };
 
         #[cfg(debug_assertions)]
         println!("connection accepted with token: {}", token);
