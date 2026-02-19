@@ -61,6 +61,7 @@ pub fn spawn_threads() {
             let shard_executor = Rc::new(RefCell::new(ShardExecutor::new()));
 
             let worker_shard_executor = shard_executor.clone();
+            let io_shard_executor = shard_executor.clone();
             // spawn worker / poller
             local.spawn_local(WorkerTask::new(
                 core_id.id,
@@ -75,6 +76,7 @@ pub fn spawn_threads() {
                 sharded_router,
                 resp_inbox,
                 io_doorbell,
+                io_shard_executor,
             ));
             //
             rt.block_on(local);

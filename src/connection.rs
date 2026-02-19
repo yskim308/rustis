@@ -21,6 +21,7 @@ use crate::{
     parser::{parse, BufParseError},
     polling::{notified_ring_buffer::NotifiedProducer, task_notifier::TaskNotifier},
     router::MessageRouter,
+    shard_executor::{self, ShardExecutor},
 };
 
 struct ConnectionState {
@@ -79,6 +80,7 @@ pub async fn spawn_io(
     worker_queues: WorkerQueues,
     io_queues: Vec<Consumer<ResponseMessage>>,
     io_doorbell: Arc<TaskNotifier>,
+    shard_executor: Rc<RefCell<ShardExecutor>>,
 ) -> tokio::io::Result<()> {
     let args: Vec<String> = env::args().collect();
     let port = args
@@ -149,9 +151,18 @@ pub async fn spawn_io(
 
         let cloned_worker_queues = worker_queues.clone();
         let cloned_connections = connections.clone();
+        let cloned_shard_executor = shard_executor.clone();
         // pass in token to reader task
         tokio::task::spawn_local(async move {
-            if let Err(err) = reader_task(read_half, cloned_worker_queues, token, core_id).await {
+            if let Err(err) = reader_task(
+                read_half,
+                cloned_worker_queues,
+                token,
+                core_id,
+                cloned_shard_executor,
+            )
+            .await
+            {
                 eprintln!("reader_task error (conn {token}): {err}");
             }
             cloned_connections.borrow_mut().remove(token);
@@ -278,11 +289,12 @@ async fn reader_task(
     worker_queues: WorkerQueues,
     conn_token: usize,
     core_id: usize,
+    shard_executor: Rc<RefCell<ShardExecutor>>,
 ) -> tokio::io::Result<()> {
     let mut read_buffer = BytesMut::with_capacity(64 * 1024);
 
     // each connection gets their own stateful router
-    let router = MessageRouter::new(worker_queues, conn_token, core_id);
+    let router = MessageRouter::new(worker_queues, conn_token, core_id, shard_executor);
 
     let mut seq: u64 = 0;
     loop {

@@ -1,22 +1,34 @@
-use std::hash::{DefaultHasher, Hash, Hasher};
+use std::{
+    cell::RefCell,
+    hash::{DefaultHasher, Hash, Hasher},
+    rc::Rc,
+};
 
 use crate::{
     connection::WorkerQueues,
     message::{RespFrame, WorkerMessage},
+    shard_executor::{self, ShardExecutor},
 };
 
 pub struct MessageRouter {
     worker_queues: WorkerQueues,
     conn_token: usize,
     src_core: usize,
+    shard_executor: Rc<RefCell<ShardExecutor>>,
 }
 
 impl MessageRouter {
-    pub fn new(worker_queues: WorkerQueues, conn_token: usize, src_core: usize) -> Self {
+    pub fn new(
+        worker_queues: WorkerQueues,
+        conn_token: usize,
+        src_core: usize,
+        shard_executor: Rc<RefCell<ShardExecutor>>,
+    ) -> Self {
         MessageRouter {
             worker_queues,
             conn_token,
             src_core,
+            shard_executor,
         }
     }
 
@@ -39,12 +51,15 @@ impl MessageRouter {
             return;
         }
 
+        // key hashing
         let mut worker_queues = self.worker_queues.borrow_mut();
         let mut hasher = DefaultHasher::new();
         key.hash(&mut hasher);
         let to_worker = hasher.finish() as usize % worker_queues.len();
+
         if to_worker == self.src_core {
-            println!("this message could have been locally executed");
+            self.shard_executor.borrow_mut().process_message(frame);
+            return;
         }
 
         let destination_worker_queue = match worker_queues.get_mut(to_worker) {
