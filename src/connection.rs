@@ -125,7 +125,13 @@ pub async fn spawn_io(
 
     // connection accepting loop
     loop {
-        let (stream, _) = listener.accept().await?;
+        let (stream, _) = match listener.accept().await {
+            Ok(conn) => conn,
+            Err(e) => {
+                eprint!("error on core {}: {:?}", core_id, e);
+                continue;
+            }
+        };
 
         let (read_half, write_half) = stream.into_split();
 
