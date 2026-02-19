@@ -1,109 +1,105 @@
-use bytes::Bytes;
-use rustis::message::{RespFrame, ResponseMessage, WorkerMessage};
-use rustis::router::route_message;
-use tokio::sync::mpsc;
+use std::{cell::RefCell, rc::Rc, sync::Arc};
 
-/// Helper to setup a mock environment
-fn setup(
+use bytes::Bytes;
+use rtrb::{Consumer, RingBuffer};
+use rustis::{
+    connection::WorkerQueues,
+    message::{RespFrame, WorkerMessage},
+    polling::{notified_ring_buffer::NotifiedProducer, task_notifier::TaskNotifier},
+    router::MessageRouter,
+};
+
+fn make_router(
     worker_count: usize,
-) -> (
-    Vec<mpsc::UnboundedSender<WorkerMessage>>,
-    Vec<mpsc::UnboundedReceiver<WorkerMessage>>,
-    mpsc::UnboundedSender<ResponseMessage>,
-    mpsc::UnboundedReceiver<ResponseMessage>,
-) {
-    let mut worker_txs = Vec::new();
-    let mut worker_rxs = Vec::new();
+    src_core: usize,
+) -> (MessageRouter, Vec<Consumer<WorkerMessage>>) {
+    let mut producers = Vec::with_capacity(worker_count);
+    let mut consumers = Vec::with_capacity(worker_count);
 
     for _ in 0..worker_count {
-        let (tx, rx) = mpsc::unbounded_channel();
-        worker_txs.push(tx);
-        worker_rxs.push(rx);
+        let (tx, rx) = RingBuffer::<WorkerMessage>::new(64);
+        let notifier = Arc::new(TaskNotifier::new());
+        producers.push(NotifiedProducer::new(tx, notifier));
+        consumers.push(rx);
     }
 
-    let (writer_tx, writer_rx) = mpsc::unbounded_channel();
-
-    (worker_txs, worker_rxs, writer_tx, writer_rx)
+    let queues: WorkerQueues = Rc::new(RefCell::new(producers));
+    (MessageRouter::new(queues, 42, src_core), consumers)
 }
 
-#[tokio::test]
-async fn test_happy_path_routing() {
-    let worker_count = 4;
-    let (worker_txs, mut worker_rxs, writer_tx, mut writer_rx) = setup(worker_count);
-
-    let frame = RespFrame::Array(Some(vec![
-        RespFrame::BulkString(Some(Bytes::from("GET"))),
-        RespFrame::BulkString(Some(Bytes::from("user_123"))),
-    ]));
-
-    // Execute
-    route_message(&worker_txs, frame.clone(), 42, writer_tx);
-
-    // 1. Ensure NO error was sent to the writer
-    assert!(writer_rx.try_recv().is_err());
-
-    // 2. Ensure exactly ONE worker received the message
-    let mut found = false;
-    for rx in &mut worker_rxs {
-        if let Ok(msg) = rx.try_recv() {
-            assert_eq!(msg.seq, 42);
-            assert_eq!(msg.response_value, frame);
-            found = true;
-            break;
+fn pop_all(consumers: &mut [Consumer<WorkerMessage>]) -> Vec<WorkerMessage> {
+    let mut out = Vec::new();
+    for consumer in consumers {
+        while let Ok(msg) = consumer.pop() {
+            out.push(msg);
         }
     }
-    assert!(found, "Message was not routed to any worker");
+    out
 }
 
-#[tokio::test]
-async fn test_ping_pong_intercept() {
-    let worker_count = 2;
-    let (worker_txs, _, writer_tx, mut writer_rx) = setup(worker_count);
-
-    let frame = RespFrame::Array(Some(vec![RespFrame::BulkString(Some(Bytes::from("PING")))]));
-
-    route_message(&worker_txs, frame, 1, writer_tx);
-
-    let response = writer_rx.try_recv().expect("Should receive PONG response");
-    // Check the ResponseMessage structure
-    match response.response_value {
-        RespFrame::Error(msg) => {
-            assert_eq!(msg, "PONG");
-        }
-        _ => panic!("Expected Error variant with PONG"),
-    }
+fn bulk(s: &str) -> RespFrame {
+    RespFrame::BulkString(Some(Bytes::copy_from_slice(s.as_bytes())))
 }
 
-#[tokio::test]
-async fn test_invalid_frame_type() {
-    let worker_count = 2;
-    let (worker_txs, _, writer_tx, mut writer_rx) = setup(worker_count);
+#[test]
+fn routes_keyed_command_to_exactly_one_worker() {
+    let (router, mut consumers) = make_router(4, 0);
+    let frame = RespFrame::Array(Some(vec![bulk("GET"), bulk("user:1")]));
 
-    // Sending a SimpleString where an Array is expected
-    let frame = RespFrame::SimpleString("I am not an array".into());
+    router.route_message(frame.clone(), 7);
 
-    route_message(&worker_txs, frame, 1, writer_tx);
+    let messages = pop_all(&mut consumers);
+    assert_eq!(messages.len(), 1);
 
-    let response = writer_rx.try_recv().expect("Should receive error response");
-    match response.response_value {
-        RespFrame::Error(_) => {}
-        _ => panic!("Expected Error variant"),
-    }
+    let msg = &messages[0];
+    assert_eq!(msg.seq, 7);
+    assert_eq!(msg.conn_token, 42);
+    assert_eq!(msg.response_value, frame);
 }
 
-#[tokio::test]
-async fn test_missing_key_error() {
-    let worker_count = 2;
-    let (worker_txs, _, writer_tx, mut writer_rx) = setup(worker_count);
+#[test]
+fn rejects_empty_request_array() {
+    let (router, mut consumers) = make_router(2, 1);
 
-    // Command with no key: ["GET"]
-    let frame = RespFrame::Array(Some(vec![RespFrame::BulkString(Some(Bytes::from("GET")))]));
+    router.route_message(RespFrame::Array(Some(vec![])), 5);
 
-    route_message(&worker_txs, frame, 1, writer_tx);
+    let messages = pop_all(&mut consumers);
+    assert_eq!(messages.len(), 1);
 
-    let response = writer_rx.try_recv().expect("Should receive parsing error");
-    match response.response_value {
-        RespFrame::Error(_) => {}
-        _ => panic!("Expected Error variant"),
-    }
+    let msg = &messages[0];
+    assert_eq!(msg.src_core, 1);
+    assert_eq!(msg.seq, 5);
+    assert!(matches!(msg.response_value, RespFrame::Error(_)));
+}
+
+#[test]
+fn ping_is_handled_as_direct_pong() {
+    let (router, mut consumers) = make_router(3, 2);
+    let frame = RespFrame::Array(Some(vec![bulk("PING")]));
+
+    router.route_message(frame, 11);
+
+    let messages = pop_all(&mut consumers);
+    assert_eq!(messages.len(), 1);
+
+    let msg = &messages[0];
+    assert_eq!(msg.src_core, 2);
+    assert_eq!(msg.seq, 11);
+    assert_eq!(msg.response_value, RespFrame::SimpleString("PONG".into()));
+}
+
+#[test]
+fn missing_key_for_keyed_command_returns_error() {
+    let (router, mut consumers) = make_router(3, 0);
+    let frame = RespFrame::Array(Some(vec![bulk("GET")]));
+
+    router.route_message(frame, 13);
+
+    let messages = pop_all(&mut consumers);
+    assert_eq!(messages.len(), 1);
+
+    let msg = &messages[0];
+    assert_eq!(msg.src_core, 0);
+    assert_eq!(msg.seq, 13);
+    assert!(matches!(msg.response_value, RespFrame::Error(_)));
 }
