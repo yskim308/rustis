@@ -204,6 +204,7 @@ impl Future for IOInboxPoller {
         for consumer in &self.inboxes {
             if !consumer.is_empty() {
                 self.doorbell.is_sleeping.store(false, Ordering::Release);
+                cx.waker().wake_by_ref();
                 return Poll::Pending;
             }
         }
