@@ -7,9 +7,9 @@ use tokio::task::LocalSet;
 
 use crate::{
     connection::spawn_io,
+    core::shard_executor::ShardExecutor,
     message::{ResponseMessage, WorkerMessage},
     polling::{notified_ring_buffer::NotifiedProducer, task_notifier::TaskNotifier},
-    shard_executor::ShardExecutor,
     worker::WorkerTask,
 };
 

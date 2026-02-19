@@ -8,9 +8,9 @@ use std::{
 use rtrb::Consumer;
 
 use crate::{
+    core::shard_executor::ShardExecutor,
     message::{ResponseMessage, WorkerMessage},
     polling::{notified_ring_buffer::NotifiedProducer, task_notifier::TaskNotifier},
-    shard_executor::ShardExecutor,
 };
 
 pub struct WorkerTask {
