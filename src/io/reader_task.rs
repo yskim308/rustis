@@ -10,6 +10,7 @@ use tokio::{io::AsyncReadExt, net::tcp::OwnedReadHalf};
 use crate::{
     core::{reply_dispatcher::ReplyDispatcher, shard_executor::ShardExecutor},
     io::spawn_io::WorkerQueues,
+    metrics::ROUTING_METRICS,
     message::{RespFrame, WorkerMessage},
     parser::{parse, BufParseError},
 };
@@ -133,6 +134,7 @@ impl ReaderTask {
         let to_worker = hasher.finish() as usize % worker_queues.len();
 
         if to_worker == self.core.core_id {
+            ROUTING_METRICS.record_keyed_local();
             let response = self.core.shard_executor.borrow_mut().process_message(frame);
             self.core.reply_dispatcher.borrow_mut().send_to_io(
                 self.core.core_id,
@@ -160,6 +162,7 @@ impl ReaderTask {
             to_worker, frame
         );
 
+        ROUTING_METRICS.record_keyed_remote();
         destination_worker_queue
             .push_with_notify(WorkerMessage {
                 seq,
@@ -209,6 +212,7 @@ impl ReaderTask {
     }
 
     fn send_value_directly(&self, seq: u64, value: RespFrame) {
+        ROUTING_METRICS.record_direct();
         let mut worker_queues = self.core.worker_queues.borrow_mut();
         let worker_queue = match worker_queues.get_mut(self.core.core_id) {
             Some(queue) => queue,

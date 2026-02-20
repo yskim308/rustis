@@ -3,6 +3,7 @@ pub mod handler;
 pub mod io;
 pub mod kv;
 pub mod message;
+pub mod metrics;
 pub mod parser;
 pub mod polling;
 pub mod threads;
