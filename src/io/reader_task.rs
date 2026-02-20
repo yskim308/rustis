@@ -1,31 +1,65 @@
-pub async fn reader_task(
-    mut read_half: OwnedReadHalf,
-    worker_queues: WorkerQueues,
-    conn_token: usize,
-    core_id: usize,
-    shard_executor: Rc<RefCell<ShardExecutor>>,
-    reply_dispatcher: Rc<RefCell<ReplyDispatcher>>,
-) -> tokio::io::Result<()> {
-    let mut read_buffer = BytesMut::with_capacity(64 * 1024);
+use std::{cell::RefCell, rc::Rc};
 
-    // each connection gets their own stateful router
-    let router = MessageRouter::new(worker_queues, conn_token, core_id, shard_executor);
+use bytes::BytesMut;
+use tokio::{io::AsyncReadExt, net::tcp::OwnedReadHalf};
 
-    let mut seq: u64 = 0;
-    loop {
-        read_buffer.reserve(1024);
-        if read_half.read_buf(&mut read_buffer).await? == 0 {
-            break; //
+use crate::{
+    core::{reply_dispatcher::ReplyDispatcher, shard_executor::ShardExecutor},
+    io::spawn_io::WorkerQueues,
+    message::RespFrame,
+    parser::{parse, BufParseError},
+    router::MessageRouter,
+};
+
+pub struct ReaderTask {
+    read_half: OwnedReadHalf,
+    read_buffer: BytesMut,
+    router: MessageRouter,
+    seq: u64,
+}
+
+impl ReaderTask {
+    pub fn new(
+        read_half: OwnedReadHalf,
+        worker_queues: WorkerQueues,
+        conn_token: usize,
+        core_id: usize,
+        shard_executor: Rc<RefCell<ShardExecutor>>,
+        _reply_dispatcher: Rc<RefCell<ReplyDispatcher>>,
+    ) -> Self {
+        let router = MessageRouter::new(worker_queues, conn_token, core_id, shard_executor);
+        Self {
+            read_half,
+            read_buffer: BytesMut::with_capacity(64 * 1024),
+            router,
+            seq: 0,
+        }
+    }
+
+    pub async fn run(&mut self) -> tokio::io::Result<()> {
+        loop {
+            self.read_buffer.reserve(1024);
+            if self.read_half.read_buf(&mut self.read_buffer).await? == 0 {
+                break;
+            }
+
+            if !self.parse_and_route_frame() {
+                return Ok(());
+            }
         }
 
+        Ok(())
+    }
+
+    pub fn parse_and_route_frame(&mut self) -> bool {
         loop {
-            match parse(&mut read_buffer) {
+            match parse(&mut self.read_buffer) {
                 Ok(value) => {
                     #[cfg(debug_assertions)]
                     println!("parsed: {:?}", value);
 
-                    router.route_message(value, seq);
-                    seq += 1;
+                    self.router.route_message(value, self.seq);
+                    self.seq += 1;
                 }
                 Err(BufParseError::Incomplete) => {
                     break;
@@ -34,22 +68,26 @@ pub async fn reader_task(
                     match b {
                         Some(byte) => {
                             let s = format!("ERR invalid first byte: {}", byte);
-                            router.route_message(RespFrame::Error(s.into()), seq);
+                            self.router
+                                .route_message(RespFrame::Error(s.into()), self.seq);
                         }
-                        None => router.route_message(
+                        None => self.router.route_message(
                             RespFrame::Error("ERR first byte not found".into()),
-                            seq,
+                            self.seq,
                         ),
                     };
-                    return Ok(()); // Close connection on protocol error
+                    return false;
                 }
                 _ => {
-                    router.route_message(RespFrame::Error("ERR internal server error".into()), seq);
-                    return Ok(()); // Close connection on error
+                    self.router.route_message(
+                        RespFrame::Error("ERR internal server error".into()),
+                        self.seq,
+                    );
+                    return false;
                 }
             }
         }
-    }
 
-    Ok(())
+        true
+    }
 }

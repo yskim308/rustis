@@ -21,7 +21,7 @@ use crate::{
         reply_dispatcher::{self, ReplyDispatcher},
         shard_executor::ShardExecutor,
     },
-    io::{connection_state::ConnectionState, io_poller::IOInboxPoller},
+    io::{connection_state::ConnectionState, io_poller::IOInboxPoller, reader_task::ReaderTask},
     message::{RespFrame, ResponseMessage, WorkerMessage},
     parser::{parse, BufParseError},
     polling::{notified_ring_buffer::NotifiedProducer, task_notifier::TaskNotifier},
@@ -112,16 +112,16 @@ pub async fn spawn_io(
 
         // pass in token to reader task
         tokio::task::spawn_local(async move {
-            if let Err(err) = reader_task(
+            let mut reader_task = ReaderTask::new(
                 read_half,
                 cloned_worker_queues,
                 token,
                 core_id,
                 cloned_shard_executor,
                 cloend_reply_dispatcher,
-            )
-            .await
-            {
+            );
+
+            if let Err(err) = reader_task.run().await {
                 eprintln!("reader_task error (conn {token}): {err}");
             }
             cloned_connections.borrow_mut().remove(token);
