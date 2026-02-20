@@ -7,7 +7,10 @@ use tokio::task::LocalSet;
 
 use crate::{
     connection::spawn_io,
-    core::shard_executor::ShardExecutor,
+    core::{
+        reply_dispatcher::{self, ReplyDispatcher},
+        shard_executor::ShardExecutor,
+    },
     message::{ResponseMessage, WorkerMessage},
     polling::{notified_ring_buffer::NotifiedProducer, task_notifier::TaskNotifier},
     worker::WorkerTask,
@@ -29,9 +32,11 @@ pub fn spawn_threads() {
     let mut handles = Vec::with_capacity(num_cores);
 
     for core_id in core_ids.into_iter() {
+        // queue head / tail for workers
         let req_outbox = req_txs.remove(0);
         let req_inbox = req_rxs.remove(0);
 
+        // queuue head / tail for writers
         let resp_outbox = resp_txs.remove(0);
         let resp_inbox = resp_rxs.remove(0);
 
@@ -59,16 +64,21 @@ pub fn spawn_threads() {
 
             // each core gets its shard executor, reader / writer share it
             let shard_executor = Rc::new(RefCell::new(ShardExecutor::new()));
-
             let worker_shard_executor = shard_executor.clone();
             let io_shard_executor = shard_executor.clone();
+
+            // each core gets its reply dispatcher (reader / writer share it)
+            let reply_dispatcher = Rc::new(RefCell::new(ReplyDispatcher::new(resp_outbox)));
+            let worker_reply_dispatcher = reply_dispatcher.clone();
+            let io_reply_dispatcher = reply_dispatcher.clone();
+
             // spawn worker / poller
             local.spawn_local(WorkerTask::new(
                 core_id.id,
                 req_inbox,
-                resp_outbox,
                 worker_doorbell,
                 worker_shard_executor,
+                worker_reply_dispatcher,
             ));
 
             local.spawn_local(spawn_io(
@@ -77,6 +87,7 @@ pub fn spawn_threads() {
                 resp_inbox,
                 io_doorbell,
                 io_shard_executor,
+                io_reply_dispatcher,
             ));
             //
             rt.block_on(local);

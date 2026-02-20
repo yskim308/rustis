@@ -8,17 +8,17 @@ use std::{
 use rtrb::Consumer;
 
 use crate::{
-    core::shard_executor::ShardExecutor,
-    message::{ResponseMessage, WorkerMessage},
-    polling::{notified_ring_buffer::NotifiedProducer, task_notifier::TaskNotifier},
+    core::{reply_dispatcher::ReplyDispatcher, shard_executor::ShardExecutor},
+    message::WorkerMessage,
+    polling::task_notifier::TaskNotifier,
 };
 
 pub struct WorkerTask {
     _worker_id: usize,
     inboxes: Vec<Consumer<WorkerMessage>>,
-    to_writer: Vec<NotifiedProducer<ResponseMessage>>,
     doorbell: Arc<TaskNotifier>,
     shard_executor: Rc<RefCell<ShardExecutor>>,
+    reply_dispatcher: Rc<RefCell<ReplyDispatcher>>,
 }
 
 impl Future for WorkerTask {
@@ -72,16 +72,16 @@ impl WorkerTask {
     pub fn new(
         worker_id: usize,
         inboxes: Vec<Consumer<WorkerMessage>>,
-        to_writer: Vec<NotifiedProducer<ResponseMessage>>,
         doorbell: Arc<TaskNotifier>,
         shard_executor: Rc<RefCell<ShardExecutor>>,
+        reply_dispatcher: Rc<RefCell<ReplyDispatcher>>,
     ) -> Self {
         WorkerTask {
             _worker_id: worker_id,
             inboxes,
-            to_writer,
             doorbell,
             shard_executor,
+            reply_dispatcher,
         }
     }
 
@@ -95,17 +95,12 @@ impl WorkerTask {
         #[cfg(debug_assertions)]
         println!("sending response: {:?} to core {}", response, msg.src_core);
         // note: later, we should be using .get() and handling errors properly
-        self.to_writer[msg.src_core]
-            .push_with_notify(ResponseMessage {
-                seq: msg.seq,
-                conn_token: msg.conn_token,
-                response_value: response,
-            })
-            .unwrap_or_else(|err| {
-                eprintln!(
-                    "worker response push failed (conn {}, seq {}): {:?}",
-                    msg.conn_token, msg.seq, err
-                );
-            });
+
+        self.reply_dispatcher.borrow_mut().send_to_io(
+            msg.src_core,
+            msg.conn_token,
+            msg.seq,
+            response,
+        );
     }
 }
