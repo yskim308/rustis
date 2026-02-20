@@ -6,11 +6,11 @@ use thread_priority::{set_current_thread_priority, ThreadPriority};
 use tokio::task::LocalSet;
 
 use crate::{
-    connection::spawn_io,
     core::{
-        reply_dispatcher::{self, ReplyDispatcher},
+        reply_dispatcher::ReplyDispatcher,
         shard_executor::ShardExecutor,
     },
+    io::spawn_io::spawn_io,
     message::{ResponseMessage, WorkerMessage},
     polling::{notified_ring_buffer::NotifiedProducer, task_notifier::TaskNotifier},
     worker::WorkerTask,

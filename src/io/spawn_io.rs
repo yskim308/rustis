@@ -3,29 +3,20 @@ use std::{
     env,
     net::{self},
     rc::Rc,
-    sync::{atomic::Ordering, Arc},
-    task::Poll,
+    sync::Arc,
 };
 
-use bytes::{Buf, BytesMut};
 use rtrb::Consumer;
 use slab::Slab;
 use socket2::{Domain, Protocol, Socket, Type};
-use tokio::{
-    io::AsyncReadExt,
-    net::tcp::{OwnedReadHalf, OwnedWriteHalf},
-};
-
 use crate::{
     core::{
-        reply_dispatcher::{self, ReplyDispatcher},
+        reply_dispatcher::ReplyDispatcher,
         shard_executor::ShardExecutor,
     },
     io::{connection_state::ConnectionState, io_poller::IOInboxPoller, reader_task::ReaderTask},
-    message::{RespFrame, ResponseMessage, WorkerMessage},
-    parser::{parse, BufParseError},
+    message::{ResponseMessage, WorkerMessage},
     polling::{notified_ring_buffer::NotifiedProducer, task_notifier::TaskNotifier},
-    router::MessageRouter,
 };
 
 pub type WorkerQueues = Rc<RefCell<Vec<NotifiedProducer<WorkerMessage>>>>;
