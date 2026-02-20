@@ -1,6 +1,6 @@
-pub mod connection;
 pub mod core;
 pub mod handler;
+pub mod io;
 pub mod kv;
 pub mod message;
 pub mod parser;
