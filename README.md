@@ -16,9 +16,13 @@ Redis is single-threaded by design. Modern servers have 64+ cores going unused. 
 🚧 Multi-threaded shared-nothing architecture (in progress)
 
 ## Key Optimizations
-- **Zero-copy parsing**: Slice references avoid allocations for reads
-- **Bytes Crate**: for effiicent cloning and avoiding any unnecessary owned values
-- **jemalloc**: Use jemallocator for more performant malloc calls 
+- **Zero-copy RESP parsing**: `parser.rs` uses `Bytes` slices instead of copying payloads.
+- **Sharded state per core**: each `ShardExecutor` owns a local `KvStore`, avoiding cross-core locks.
+- **Lock-free inter-core queues**: request/response traffic uses bounded `rtrb` rings.
+- **Batched queue flushes**: reader/worker paths batch by destination (`BATCH_SIZE=64`) to reduce wakeups.
+- **Wake-on-demand polling**: `TaskNotifier` only wakes sleeping tasks, avoiding busy loops.
+- **Write-side ordering window**: `ConnectionState` keeps a fixed `WINDOW_SIZE=1024` sequence buffer for pipelined response ordering with low overhead.
+- **Allocator/runtime tuning**: `jemalloc`, LTO, single `codegen-units`, and `panic=abort` are enabled for release builds.
 
 
 ## Quick Start
@@ -66,115 +70,141 @@ Currently the following commands are supported:
 
 ---
 
-# Current Benchmarks
+# Benchmarks
 
-## Redis Baseline (official redis-server benchmarks)
-
-|Test Name                            |Command|RPS       |Latency (p50)|
-|-------------------------------------|-------|----------|-------------|
-|Regular Load (Baseline)              |SET    |236686.38 |0.111        |
-|Regular Load (Baseline)              |GET    |245700.25 |0.111        |
-|High Concurrency & Throughput (Mixed)|SET    |874890.62 |76.351       |
-|High Concurrency & Throughput (Mixed)|GET    |2857143.00|18.351       |
-|High Concurrency & Throughput (Mixed)|LPUSH  |2525252.50|21.615       |
-|High Concurrency & Throughput (Mixed)|LPOP   |2450980.50|22.367       |
-|Heavy Payload Saturation (4KB)       |SET    |480769.25 |9.919        |
-|Heavy Payload Saturation (4KB)       |GET    |618811.88 |19.535       |
-
----
-
-## multithread_v1 vs Redis Baseline 
-
+## multithread vs Redis Baseline 
 
 | Test Name | Cmd | RPS | Δ RPS | Latency (ms) | Δ Lat |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| High Concurrency & Throughput (Mixed) | SET | 621,118 | 🔴 -29.69% | 99.455 | 🔴 +30.26% |
-| High Concurrency & Throughput (Mixed) | GET | 636,943 | 🔴 -77.77% | 97.919 | 🔴 +436.40% |
-| High Concurrency & Throughput (Mixed) | LPUSH | 2,469,136 | 🔴 -4.20% | 23.119 | 🔴 +9.30% |
-| High Concurrency & Throughput (Mixed) | LPOP | 2,444,988 | 🟢 +0.49% | 21.215 | 🟢 -6.88% |
-| High Concurrency & Throughput (Mixed) | SADD | 3,215,434 | 🟢 +23.15% | 17.759 | 🟢 -13.15% |
-| High Concurrency & Throughput (Mixed) | SPOP | 1,540,832 | 🔴 -52.23% | 21.183 | 🔴 +60.10% |
-| Heavy Payload Saturation (4KB) | SET | 392,157 | 🔴 -19.61% | 37.759 | 🔴 +288.19% |
-| Heavy Payload Saturation (4KB) | GET | 373,692 | 🔴 -38.12% | 39.423 | 🔴 +89.11% |
+| High Concurrency & Throughput (Mixed) | SET | 1,369,863 | 🟢 +55.07% | 21.263 | 🟢 -72.15% |
+| High Concurrency & Throughput (Mixed) | GET | 1,396,648 | 🔴 -51.26% | 20.607 | 🔴 +12.88% |
+| High Concurrency & Throughput (Mixed) | LPUSH | 2,551,020 | 🔴 -1.02% | 11.999 | 🟢 -43.27% |
+| High Concurrency & Throughput (Mixed) | LPOP | 2,645,503 | 🟢 +8.73% | 11.303 | 🟢 -50.39% |
+| High Concurrency & Throughput (Mixed) | SADD | 2,949,852 | 🟢 +12.98% | 10.583 | 🟢 -48.24% |
+| High Concurrency & Throughput (Mixed) | SPOP | 3,115,265 | 🔴 -3.43% | 9.151 | 🟢 -30.84% |
+| Heavy Payload Saturation (4KB) | SET | 442,870 | 🔴 -9.21% | 16.319 | 🔴 +67.77% |
+| Heavy Payload Saturation (4KB) | GET | 433,276 | 🔴 -28.25% | 9.239 | 🟢 -55.68% |
 
 
-- currently, we are *worse* than the single_threaded architecture (check branch `single_thread` for details on the optimized, single-threaded version)
+## singlethread vs Redis Baseline
+
+| Test Name | Cmd | RPS | Δ RPS | Latency (ms) | Δ Lat |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| High Concurrency & Throughput (Mixed) | SET | 2,941,176 | 🟢 +232.94% | 17.839 | 🟢 -76.64% |
+| High Concurrency & Throughput (Mixed) | GET | 2,976,190 | 🟢 +3.87% | 17.343 | 🟢 -5.00% |
+| High Concurrency & Throughput (Mixed) | LPUSH | 3,448,276 | 🟢 +33.79% | 15.487 | 🟢 -26.78% |
+| High Concurrency & Throughput (Mixed) | LPOP | 3,731,343 | 🟢 +53.36% | 14.055 | 🟢 -38.31% |
+| High Concurrency & Throughput (Mixed) | SADD | 2,958,580 | 🟢 +13.31% | 17.967 | 🟢 -12.13% |
+| High Concurrency & Throughput (Mixed) | SPOP | 2,074,689 | 🔴 -35.68% | 11.599 | 🟢 -12.33% |
+| Heavy Payload Saturation (4KB) | SET | 627,353 | 🟢 +28.61% | 22.431 | 🔴 +130.61% |
+| Heavy Payload Saturation (4KB) | GET | 723,589 | 🟢 +19.83% | 19.327 | 🟢 -7.29% |
+
+
+## multithread vs singlethread
+
+| Test Name | Cmd | RPS | Δ RPS | Latency (ms) | Δ Lat |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| High Concurrency & Throughput (Mixed) | SET | 1,369,863 | 🔴 -53.42% | 21.263 | 🔴 +19.19% |
+| High Concurrency & Throughput (Mixed) | GET | 1,396,648 | 🔴 -53.07% | 20.607 | 🔴 +18.82% |
+| High Concurrency & Throughput (Mixed) | LPUSH | 2,551,020 | 🔴 -26.02% | 11.999 | 🟢 -22.52% |
+| High Concurrency & Throughput (Mixed) | LPOP | 2,645,503 | 🔴 -29.10% | 11.303 | 🟢 -19.58% |
+| High Concurrency & Throughput (Mixed) | SADD | 2,949,852 | 🔴 -0.29% | 10.583 | 🟢 -41.10% |
+| High Concurrency & Throughput (Mixed) | SPOP | 3,115,265 | 🟢 +50.16% | 9.151 | 🟢 -21.11% |
+| Heavy Payload Saturation (4KB) | SET | 442,870 | 🔴 -29.41% | 16.319 | 🟢 -27.25% |
+| Heavy Payload Saturation (4KB) | GET | 433,276 | 🔴 -40.12% | 9.239 | 🟢 -52.20% |
+
 
 ---
 
 # Code Architecture
 
-- current model is **N-thread sharded execution**, where `N = number of CPU cores`
+Current model is **N-thread sharded execution**, where `N = number of CPU cores`.
 
-1. `main -> spawn_threads()` creates one OS thread per core (core-pinned on Linux, max priority when available)
+1. `main -> spawn_threads()` starts:
+   - one acceptor thread with a single TCP listener
+   - one worker/IO OS thread per core (core-pinned on Linux, max priority when available)
 
-2. each core thread creates:
-   - a single-thread Tokio runtime (`LocalSet`)
-   - one local `WorkerTask` with its own `KvStore` shard
-   - one local I/O task (`spawn_io`) that accepts and manages TCP connections for that core
+2. Each core thread creates a single-thread Tokio runtime (`LocalSet`) and spawns:
+   - `WorkerTask` (`src/worker.rs`) for command execution on that core's shard
+   - `spawn_io` (`src/io/spawn_io.rs`) for connection lifecycle and writeback polling
 
-3. request/response transport is a **full mesh** of bounded lock-free ring buffers (`rtrb`):
-   - request mesh: `req_txs[src][dst]` / `req_rxs[dst][src]` for `WorkerMessage`
-   - response mesh: `resp_txs[src][dst]` / `resp_rxs[dst][src]` for `ResponseMessage`
-   - each destination side has a `TaskNotifier` doorbell for wakeups
+3. Inter-core transport is a **full mesh** of bounded lock-free ring buffers (`rtrb`):
+   - request mesh: `req_txs[src][dst]` / `req_rxs[dst][src]` (`WorkerMessage`)
+   - response mesh: `resp_txs[src][dst]` / `resp_rxs[dst][src]` (`ResponseMessage`)
+   - each destination has a `TaskNotifier` doorbell for wake-on-demand polling
 
-4. in each connection `reader_task`:
-   - parses RESP frames (`parser.rs`)
-   - attaches a per-connection `seq` number
-   - routes via `router.rs`
+4. Reader path (`src/io/reader_task.rs`) per connection:
+   - parses RESP frames from a reusable `BytesMut` buffer (`src/parser.rs`)
+   - attaches monotonically increasing per-connection `seq`
+   - hashes command key to pick destination core
 
-5. routing behavior (`MessageRouter`):
-   - command key is hashed to pick destination worker shard
-   - keyed commands (`GET/SET/...`) go to owning worker core
-   - direct replies (e.g. `PING`, protocol errors, malformed input) are sent to the source core's worker queue
+5. Routing behavior:
+   - local keyed request: execute inline via local `ShardExecutor`, then send response to local IO queue
+   - remote keyed request: batch and forward `WorkerMessage` to destination worker queue
+   - direct replies (`PING`, parse/protocol errors): enqueue to local worker queue for uniform response path
 
-6. worker behavior (`worker.rs`):
-   - polls all inbound request queues for that worker core
-   - executes command handlers against its local shard (`handler.rs` + `kv.rs`)
-   - sends `ResponseMessage` back to the originating I/O core (`src_core`)
+6. Worker path (`src/worker.rs`):
+   - drains all inbound request queues with per-queue quotas
+   - executes command handlers (`src/handler.rs`) against local `KvStore` shard (`src/kv.rs`)
+   - batches responses by destination IO core and flushes round-robin
 
-7. response write path (`IOInboxPoller` in `connection.rs`):
-   - polls all inbound response queues for that I/O core
-   - maps `conn_token -> ConnectionState`
-   - enqueues responses by `seq` and flushes in order
-   - uses a fixed ordering window (`WINDOW_SIZE = 1024`) to preserve pipeline ordering
+7. Write path (`src/io/io_poller.rs` + `src/io/connection_state.rs`):
+   - drains inbound response queues into per-connection state (`conn_token`)
+   - stages responses in sequence order (`seq`) using a fixed ring window (`WINDOW_SIZE=1024`)
+   - writes to sockets with a per-tick syscall budget to keep fairness across connections
 
 ```mermaid
 flowchart TD
-    Client[Clients] -->|TCP + SO_REUSEPORT| IO0[IO Task Core 0]
-    Client -->|TCP + SO_REUSEPORT| IOi[IO Task Core i]
-    Client -->|TCP + SO_REUSEPORT| ION[IO Task Core N]
+    C[Clients] --> A[Acceptor Thread<br/>single listener + round-robin dispatch]
+    A --> IOi[Core i IO task]
+    A --> IOj[Core j IO task]
 
-    subgraph Core_i[Core i Runtime]
-        Reader[reader_task<br/>parse + seq] --> Router[MessageRouter<br/>hash key to shard]
-        Router -->|req queue| Wi[Worker i<br/>KV shard i]
-        Router -->|req queue| Wj[Worker j<br/>KV shard j]
-        Wi -->|resp queue to src core| Poller[IOInboxPoller<br/>order by seq + write]
-        Wj -->|resp queue to src core| Poller
+    subgraph Ci[Core i Runtime]
+        R[ReaderTask<br/>parse + seq + key hash]
+        LI[Local keyed path<br/>ShardExecutor]
+        WI[WorkerTask i<br/>KvStore shard i]
+        P[IOInboxPoller + ConnectionState<br/>seq reorder + write]
+        R --> LI
+        R -->|remote batch| WJ
+        R -->|direct command/error| WI
+        LI -->|resp->IO i| P
+        WI -->|resp->src IO| P
     end
 
-    IOi --> Reader
-    Poller -->|TCP write| Client
+    subgraph Cj[Core j Runtime]
+        WJ[WorkerTask j<br/>KvStore shard j]
+        PJ[IOInboxPoller + ConnectionState]
+        WJ -->|resp->src IO| PJ
+    end
+
+    IOi --> R
+    P --> C
+    PJ --> C
 ```
 
-## Current Tradeoffs
+---
 
-- every request still crosses async task + queue boundaries (`reader -> router -> worker -> io writer`)
-- cross-core routing for non-local keys adds queue traffic and wakeup overhead
-- preserving per-connection ordering adds buffering and sequencing work on the write side
-- bounded queues and fixed response windows require backpressure discipline under extreme pipelining
+# Throughput vs Latency Tradeoffs
 
-This is no longer a single coordinator-thread fan-in/fan-out design; it is a per-core runtime with sharded state and cross-core message passing.
+Why this multithreaded design can improve latency while still losing peak `GET` throughput in some benchmarks:
 
-### Future Optimizations (multithread_V3)
+1. **Fixed per-request overhead is high for tiny reads**
+   - `GET` does little data work, so framework costs dominate: frame routing, key hashing, message packaging (`seq`, `conn_token`), queue push/pop, and ordered writeback bookkeeping.
 
-**Major Changes**:
-- allow for local execution on keys that hash to the same core 
-- pass function pointers instead of actual values to avoid mallocing everywhere 
-- batch operations, avoid multiple wakeups / round trips
-- avoid key / value cloning in hot paths, keep borrowed values as long as possible 
+2. **Remote-key requests add extra hops**
+   - When a key maps to a different shard, the path is: reader core -> request ring -> worker core -> response ring -> IO poller.
+   - This cross-core path can reduce maximum read RPS even if tail behavior remains stable.
 
-**Minor Changes**:
-- pass in hashed values into hashmap, avoid hashing twice 
-- command dispatch table instead of if-else or branching 
-- networking: use vectored writes and check that SO_REUSEPORT is actually even / fair 
+3. **Fairness limits reduce burst throughput**
+   - Queue drain quotas and per-tick flush budgets (`POLL_DRAIN_QUOTA`, `MAX_BATCH_FLUSHES_PER_TICK`, IO write syscall budget) prevent starvation and improve consistency.
+   - The same limits can cap absolute throughput during hot bursts.
+
+4. **In-order response guarantees can cause head-of-line stalls**
+   - Per-connection ordering by `seq` (`WINDOW_SIZE=1024`) means faster later responses may wait for earlier missing ones.
+   - This improves protocol correctness but can lower effective pipeline throughput under cross-core reordering.
+
+5. **Connection placement is round-robin, not key-locality-aware**
+   - The acceptor assigns connections round-robin across IO cores.
+   - If a connection's hot keys mostly belong to other shards, remote traffic increases and read throughput drops.
+
+In short: this architecture is optimized for fairness, bounded latency, and scale-out safety under concurrency. The current bottlenecks for peak `GET` RPS are mostly inter-core routing and ordering overhead, not raw hashmap lookup speed.
