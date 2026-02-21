@@ -8,14 +8,12 @@ use std::{
 use rtrb::Consumer;
 
 use crate::{
+    config::{BATCH_SIZE, MAX_BATCH_FLUSHES_PER_TICK},
     core::{reply_dispatcher::ReplyDispatcher, shard_executor::ShardExecutor},
     message::ResponseMessage,
     message::WorkerMessage,
     polling::task_notifier::TaskNotifier,
 };
-
-const RESPONSE_BATCH_SIZE: usize = 64;
-const MAX_RESPONSE_BATCH_FLUSHES_PER_TICK: usize = 16;
 
 pub struct WorkerTask {
     _worker_id: usize,
@@ -133,7 +131,7 @@ impl WorkerTask {
             return;
         }
 
-        if self.pending_responses_by_io[dst_io_core].len() >= RESPONSE_BATCH_SIZE {
+        if self.pending_responses_by_io[dst_io_core].len() >= BATCH_SIZE {
             self.flush_pending_responses(false);
         }
     }
@@ -147,7 +145,7 @@ impl WorkerTask {
         let max_flushes = if force_all {
             total_dsts
         } else {
-            MAX_RESPONSE_BATCH_FLUSHES_PER_TICK.min(total_dsts)
+            MAX_BATCH_FLUSHES_PER_TICK.min(total_dsts)
         };
 
         let mut flushed_dsts = 0usize;
@@ -160,7 +158,7 @@ impl WorkerTask {
                 continue;
             }
 
-            if !force_all && self.pending_responses_by_io[idx].len() < RESPONSE_BATCH_SIZE {
+            if !force_all && self.pending_responses_by_io[idx].len() < BATCH_SIZE {
                 continue;
             }
 

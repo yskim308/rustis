@@ -8,15 +8,13 @@ use bytes::BytesMut;
 use tokio::{io::AsyncReadExt, net::tcp::OwnedReadHalf};
 
 use crate::{
+    config::{BATCH_SIZE, MAX_BATCH_FLUSHES_PER_TICK},
     core::{reply_dispatcher::ReplyDispatcher, shard_executor::ShardExecutor},
     io::spawn_io::WorkerQueues,
     message::{RespFrame, WorkerMessage},
     metrics::ROUTING_METRICS,
     parser::{parse, BufParseError},
 };
-
-const ROUTE_BATCH_SIZE: usize = 64;
-const MAX_BATCH_FLUSHES_PER_TICK: usize = 16;
 
 pub struct ReaderTask {
     read_half: OwnedReadHalf,
@@ -243,7 +241,7 @@ impl ReaderTask {
             return;
         }
 
-        if self.pending_by_dst[dst_core].len() >= ROUTE_BATCH_SIZE {
+        if self.pending_by_dst[dst_core].len() >= BATCH_SIZE {
             self.flush_pending_requests(false);
         }
     }
@@ -271,7 +269,7 @@ impl ReaderTask {
                 continue;
             }
 
-            if !force_all && self.pending_by_dst[idx].len() < ROUTE_BATCH_SIZE {
+            if !force_all && self.pending_by_dst[idx].len() < BATCH_SIZE {
                 continue;
             }
 
