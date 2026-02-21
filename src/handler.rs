@@ -289,6 +289,10 @@ fn handle_spop(kv: &KvStore, args: &[RespFrame]) -> RespFrame {
         None => 1,
     };
 
+    if count < 0 {
+        return RespFrame::Error("ERR value is out of range, must be non-negative".into());
+    }
+
     match kv.spop(key, count) {
         Ok(bytes_vec) => {
             let response_vector: Vec<RespFrame> = bytes_vec

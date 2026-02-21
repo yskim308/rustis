@@ -1,7 +1,13 @@
 use bytes::Bytes;
 use std::cell::RefCell;
-use std::collections::{HashMap, HashSet, VecDeque};
+use std::collections::{HashMap, VecDeque};
 use std::rc::Rc;
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct IndexedSet {
+    items: Vec<Bytes>,
+    index: HashMap<Bytes, usize>,
+}
 
 #[derive(Debug)]
 pub enum DatabaseError {
@@ -13,7 +19,7 @@ pub enum DatabaseError {
 pub enum RedisValue {
     String(Bytes),
     List(VecDeque<Bytes>),
-    Set(HashSet<Bytes>),
+    Set(IndexedSet),
 }
 
 #[derive(Clone, Debug)]
@@ -171,49 +177,63 @@ impl KvStore {
     pub fn sadd(&self, key: Bytes, values: Vec<Bytes>) -> Result<i64, DatabaseError> {
         let mut db = self.db.borrow_mut();
 
-        let entry = db
-            .entry(key)
-            .or_insert_with(|| RedisValue::Set(HashSet::new()));
+        let entry = db.entry(key).or_insert_with(|| {
+            RedisValue::Set(IndexedSet {
+                items: Vec::new(),
+                index: HashMap::new(),
+            })
+        });
 
-        match entry {
-            RedisValue::Set(set) => {
-                let mut count = 0;
-                for val in values {
-                    if set.insert(val) {
-                        count += 1
-                    };
-                }
-                Ok(count)
+        let RedisValue::Set(indexed_set) = entry else {
+            return Err(DatabaseError::WrongType);
+        };
+
+        let mut count = 0;
+
+        for val in values {
+            if indexed_set.index.contains_key(&val) {
+                continue;
             }
-            _ => Err(DatabaseError::WrongType),
+            let idx = indexed_set.items.len();
+            indexed_set.items.push(val.clone());
+            indexed_set.index.insert(val, idx);
+            count += 1;
         }
+
+        Ok(count)
     }
 
     pub fn spop(&self, key: &Bytes, count: i64) -> Result<Vec<Bytes>, DatabaseError> {
         let mut db = self.db.borrow_mut();
 
-        let (popped_elements, should_remove) = match db.get_mut(key) {
-            Some(RedisValue::Set(set)) => {
-                let num_to_pop = std::cmp::min(set.len(), count as usize);
-                let mut popped = Vec::with_capacity(num_to_pop);
+        if count <= 0 {
+            return Ok(vec![]);
+        }
 
-                for _ in 0..num_to_pop {
-                    if let Some(member) = set.iter().next().cloned() {
-                        set.remove(&member);
-                        popped.push(member);
-                    }
+        let (to_return, should_remove_key) = match db.get_mut(key) {
+            Some(RedisValue::Set(indexed_set)) => {
+                let mut to_return: Vec<Bytes> = Vec::with_capacity(count as usize);
+
+                // deterministic pop for now (randomness can be added later)
+                for _ in 0..count {
+                    let Some(popped) = indexed_set.items.pop() else {
+                        break;
+                    };
+                    indexed_set.index.remove(&popped);
+                    to_return.push(popped);
                 }
-                (popped, set.is_empty())
+
+                (to_return, indexed_set.items.is_empty())
             }
             Some(_) => return Err(DatabaseError::WrongType),
             None => return Ok(vec![]),
         };
 
-        if should_remove {
+        if should_remove_key {
             db.remove(key);
         }
 
-        Ok(popped_elements)
+        Ok(to_return)
     }
 
     pub fn smembers(&self, key: &Bytes) -> Result<Vec<Bytes>, DatabaseError> {
@@ -221,7 +241,7 @@ impl KvStore {
 
         match db.get(key) {
             Some(RedisValue::Set(set)) => {
-                let members: Vec<Bytes> = set.iter().cloned().collect();
+                let members: Vec<Bytes> = set.items.to_vec();
                 Ok(members)
             }
             Some(_) => Err(DatabaseError::WrongType),
