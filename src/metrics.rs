@@ -31,8 +31,6 @@ pub struct RoutingMetrics {
 }
 
 impl RoutingMetrics {
-    const REPORT_EVERY_KEYED: u64 = 1_000_000;
-
     pub const fn new() -> Self {
         Self {
             keyed_total: AtomicU64::new(0),
@@ -43,36 +41,17 @@ impl RoutingMetrics {
     }
 
     pub fn record_keyed_local(&self) {
-        let keyed_total = self.keyed_total.fetch_add(1, Ordering::Relaxed) + 1;
+        self.keyed_total.fetch_add(1, Ordering::Relaxed);
         self.keyed_local.fetch_add(1, Ordering::Relaxed);
-        self.maybe_report(keyed_total);
     }
 
     pub fn record_keyed_remote(&self) {
-        let keyed_total = self.keyed_total.fetch_add(1, Ordering::Relaxed) + 1;
+        self.keyed_total.fetch_add(1, Ordering::Relaxed);
         self.keyed_remote.fetch_add(1, Ordering::Relaxed);
-        self.maybe_report(keyed_total);
     }
 
     pub fn record_direct(&self) {
         self.direct.fetch_add(1, Ordering::Relaxed);
-    }
-
-    fn maybe_report(&self, keyed_total: u64) {
-        if !keyed_total.is_multiple_of(Self::REPORT_EVERY_KEYED) {
-            return;
-        }
-
-        let snapshot = self.snapshot();
-        eprintln!(
-            "[routing] keyed_total={} local={} ({:.2}%) remote={} ({:.2}%) direct={}",
-            snapshot.keyed_total,
-            snapshot.keyed_local,
-            snapshot.local_pct(),
-            snapshot.keyed_remote,
-            snapshot.remote_pct(),
-            snapshot.direct,
-        );
     }
 
     pub fn snapshot(&self) -> RoutingSnapshot {
