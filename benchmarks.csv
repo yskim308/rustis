@@ -141,3 +141,15 @@ Timestamp,Git Hash,Note,Test Name,Command,RPS,Latency (p50)
 2026-02-21 15:07:50,3286f74,pollbudget,High Concurrency & Throughput (Mixed),SPOP,1084598.75,46.047
 2026-02-21 15:07:55,3286f74,pollbudget,Heavy Payload Saturation (4KB),SET,489236.81,15.399
 2026-02-21 15:07:55,3286f74,pollbudget,Heavy Payload Saturation (4KB),GET,489236.81,25.359
+2026-02-21 16:00:58,a4d50e0,fairness,Quick Sanity Check,INLINE,71428.57,0.431
+2026-02-21 16:00:58,a4d50e0,fairness,Quick Sanity Check,MBULK,71428.57,0.663
+2026-02-21 16:01:02,a4d50e0,fairness,Regular Load (Baseline),SET,106837.61,0.231
+2026-02-21 16:01:02,a4d50e0,fairness,Regular Load (Baseline),GET,113636.37,0.231
+2026-02-21 16:01:18,a4d50e0,fairness,High Concurrency & Throughput (Mixed),SET,1356852.12,21.055
+2026-02-21 16:01:18,a4d50e0,fairness,High Concurrency & Throughput (Mixed),GET,1358695.62,21.183
+2026-02-21 16:01:18,a4d50e0,fairness,High Concurrency & Throughput (Mixed),LPUSH,1353179.88,20.127
+2026-02-21 16:01:18,a4d50e0,fairness,High Concurrency & Throughput (Mixed),LPOP,1392757.62,21.071
+2026-02-21 16:01:18,a4d50e0,fairness,High Concurrency & Throughput (Mixed),SADD,1408450.75,20.287
+2026-02-21 16:01:18,a4d50e0,fairness,High Concurrency & Throughput (Mixed),SPOP,1102535.88,22.095
+2026-02-21 16:01:23,a4d50e0,fairness,Heavy Payload Saturation (4KB),SET,468164.81,15.903
+2026-02-21 16:01:23,a4d50e0,fairness,Heavy Payload Saturation (4KB),GET,377358.47,9.527
