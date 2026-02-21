@@ -32,4 +32,19 @@ impl ReplyDispatcher {
                 );
             });
     }
+
+    pub fn destination_count(&self) -> usize {
+        self.to_writer.len()
+    }
+
+    pub fn send_batch_to_io(
+        &mut self,
+        src_core: usize,
+        responses: Vec<ResponseMessage>,
+    ) -> Vec<ResponseMessage> {
+        match self.to_writer.get_mut(src_core) {
+            Some(queue) => queue.push_batch_with_notify(responses),
+            None => responses,
+        }
+    }
 }

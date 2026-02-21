@@ -15,8 +15,8 @@ use crate::{
     parser::{parse, BufParseError},
 };
 
-const ROUTE_BATCH_SIZE: usize = 1;
-const MAX_BATCH_FLUSHES_PER_TICK: usize = 4;
+const ROUTE_BATCH_SIZE: usize = 64;
+const MAX_BATCH_FLUSHES_PER_TICK: usize = 16;
 
 pub struct ReaderTask {
     read_half: OwnedReadHalf,
