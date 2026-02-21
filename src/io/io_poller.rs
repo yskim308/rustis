@@ -13,6 +13,8 @@ use crate::{
     polling::task_notifier::TaskNotifier,
 };
 
+const IO_WRITE_SYSCALL_BUDGET: usize = 512;
+
 pub struct IOInboxPoller {
     connections: ConnectionStore,
     inboxes: Vec<Consumer<ResponseMessage>>,
@@ -26,12 +28,15 @@ impl Future for IOInboxPoller {
         mut self: std::pin::Pin<&mut Self>,
         cx: &mut std::task::Context<'_>,
     ) -> std::task::Poll<Self::Output> {
+        let mut did_work = false;
+
         for i in 0..self.inboxes.len() {
             let mut quota = POLL_DRAIN_QUOTA;
 
             while quota > 0 {
                 match self.inboxes[i].pop() {
                     Ok(msg) => {
+                        did_work = true;
                         Self::handle_message(msg, &self.connections);
                     }
                     Err(_) => break,
@@ -40,19 +45,13 @@ impl Future for IOInboxPoller {
             }
         }
 
-        // No new messages, but we may still have buffered writes to flush.
-        let mut needs_flush = false;
-        {
-            let mut connections = self.connections.borrow_mut();
-            for (_, conn_state) in connections.iter_mut() {
-                if !conn_state.write_buffer.is_empty() {
-                    needs_flush = true;
-                    Self::write_to_buffer(conn_state);
-                }
-            }
-        }
-        if needs_flush {
+        let has_pending_writes = Self::flush_with_budget(&self.connections, IO_WRITE_SYSCALL_BUDGET);
+        if has_pending_writes {
             cx.waker().wake_by_ref();
+            return Poll::Pending;
+        }
+
+        if did_work {
             return Poll::Pending;
         }
 
@@ -92,20 +91,40 @@ impl IOInboxPoller {
 
         if let Some(conn_state) = connections.get_mut(msg.conn_token) {
             conn_state.enqueue_response(msg.seq, msg.response_value);
-            if !conn_state.write_buffer.is_empty() {
-                Self::write_to_buffer(conn_state);
-            }
         }
     }
 
-    fn write_to_buffer(conn_state: &mut ConnectionState) {
-        while !conn_state.write_buffer.is_empty() {
+    fn flush_with_budget(connections: &ConnectionStore, write_budget: usize) -> bool {
+        let mut remaining = write_budget;
+        let mut has_pending = false;
+        let mut connections = connections.borrow_mut();
+
+        for (_, conn_state) in connections.iter_mut() {
+            if conn_state.write_buffer.is_empty() {
+                continue;
+            }
+
+            Self::write_to_buffer_budgeted(conn_state, &mut remaining);
+            if !conn_state.write_buffer.is_empty() {
+                has_pending = true;
+            }
+
+            if remaining == 0 {
+                return true;
+            }
+        }
+
+        has_pending
+    }
+
+    fn write_to_buffer_budgeted(conn_state: &mut ConnectionState, remaining: &mut usize) {
+        while *remaining > 0 && !conn_state.write_buffer.is_empty() {
+            *remaining -= 1;
             match conn_state.writer.try_write(&conn_state.write_buffer) {
                 Ok(0) => break,
                 Ok(n) => {
                     #[cfg(debug_assertions)]
                     println!("write success");
-
                     conn_state.write_buffer.advance(n);
                 }
                 Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => break,
