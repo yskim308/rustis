@@ -153,3 +153,31 @@ Timestamp,Git Hash,Note,Test Name,Command,RPS,Latency (p50)
 2026-02-21 16:01:18,a4d50e0,fairness,High Concurrency & Throughput (Mixed),SPOP,1102535.88,22.095
 2026-02-21 16:01:23,a4d50e0,fairness,Heavy Payload Saturation (4KB),SET,468164.81,15.903
 2026-02-21 16:01:23,a4d50e0,fairness,Heavy Payload Saturation (4KB),GET,377358.47,9.527
+2026-02-21 16:46:26,26e389e,write_optimized,Quick Sanity Check,INLINE,62500.00,0.791
+2026-02-21 16:46:26,26e389e,write_optimized,Quick Sanity Check,MBULK,76923.08,0.583
+2026-02-21 16:46:31,26e389e,write_optimized,Regular Load (Baseline),SET,112803.16,0.231
+2026-02-21 16:46:31,26e389e,write_optimized,Regular Load (Baseline),GET,113314.45,0.231
+2026-02-21 16:46:45,26e389e,write_optimized,High Concurrency & Throughput (Mixed),SET,1430615.12,20.271
+2026-02-21 16:46:45,26e389e,write_optimized,High Concurrency & Throughput (Mixed),GET,1412429.38,20.575
+2026-02-21 16:46:45,26e389e,write_optimized,High Concurrency & Throughput (Mixed),LPUSH,2673796.75,11.495
+2026-02-21 16:46:45,26e389e,write_optimized,High Concurrency & Throughput (Mixed),LPOP,2702702.75,11.071
+2026-02-21 16:46:45,26e389e,write_optimized,High Concurrency & Throughput (Mixed),SADD,2932551.50,10.583
+2026-02-21 16:46:45,26e389e,write_optimized,High Concurrency & Throughput (Mixed),SPOP,1893939.38,9.863
+2026-02-21 16:46:50,26e389e,write_optimized,Heavy Payload Saturation (4KB),SET,477554.91,15.375
+2026-02-21 16:46:50,26e389e,write_optimized,Heavy Payload Saturation (4KB),GET,465549.34,7.455
+2026-02-21 19:29:38,6bb5597,spop_optimized,Quick Sanity Check,INLINE,50000.00,0.951
+2026-02-21 19:29:38,6bb5597,spop_optimized,Quick Sanity Check,MBULK,71428.57,0.735
+2026-02-21 19:29:43,6bb5597,spop_optimized,Regular Load (Baseline),SET,112676.05,0.231
+2026-02-21 19:29:43,6bb5597,spop_optimized,Regular Load (Baseline),GET,114876.51,0.231
+2026-02-21 19:36:32,6bb5597,spop_opt,Quick Sanity Check,INLINE,62500.00,0.719
+2026-02-21 19:36:32,6bb5597,spop_opt,Quick Sanity Check,MBULK,83333.34,0.599
+2026-02-21 19:36:36,6bb5597,spop_opt,Regular Load (Baseline),SET,109769.48,0.231
+2026-02-21 19:36:36,6bb5597,spop_opt,Regular Load (Baseline),GET,113186.20,0.231
+2026-02-21 19:36:51,6bb5597,spop_opt,High Concurrency & Throughput (Mixed),SET,1369863.00,21.263
+2026-02-21 19:36:51,6bb5597,spop_opt,High Concurrency & Throughput (Mixed),GET,1396648.00,20.607
+2026-02-21 19:36:51,6bb5597,spop_opt,High Concurrency & Throughput (Mixed),LPUSH,2551020.50,11.999
+2026-02-21 19:36:51,6bb5597,spop_opt,High Concurrency & Throughput (Mixed),LPOP,2645502.75,11.303
+2026-02-21 19:36:51,6bb5597,spop_opt,High Concurrency & Throughput (Mixed),SADD,2949852.50,10.583
+2026-02-21 19:36:51,6bb5597,spop_opt,High Concurrency & Throughput (Mixed),SPOP,3115264.75,9.151
+2026-02-21 19:36:56,6bb5597,spop_opt,Heavy Payload Saturation (4KB),SET,442869.81,16.319
+2026-02-21 19:36:56,6bb5597,spop_opt,Heavy Payload Saturation (4KB),GET,433275.53,9.239
