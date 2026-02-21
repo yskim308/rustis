@@ -10,10 +10,13 @@ use tokio::{io::AsyncReadExt, net::tcp::OwnedReadHalf};
 use crate::{
     core::{reply_dispatcher::ReplyDispatcher, shard_executor::ShardExecutor},
     io::spawn_io::WorkerQueues,
-    metrics::ROUTING_METRICS,
     message::{RespFrame, WorkerMessage},
+    metrics::ROUTING_METRICS,
     parser::{parse, BufParseError},
 };
+
+const ROUTE_BATCH_SIZE: usize = 1;
+const MAX_BATCH_FLUSHES_PER_TICK: usize = 4;
 
 pub struct ReaderTask {
     read_half: OwnedReadHalf,
@@ -21,6 +24,8 @@ pub struct ReaderTask {
     core: CoreHandles,
     conn_token: usize,
     seq: u64,
+    pending_by_dst: Vec<Vec<WorkerMessage>>,
+    next_flush_dst: usize,
 }
 
 struct CoreHandles {
@@ -39,6 +44,12 @@ impl ReaderTask {
         shard_executor: Rc<RefCell<ShardExecutor>>,
         reply_dispatcher: Rc<RefCell<ReplyDispatcher>>,
     ) -> Self {
+        let worker_count = worker_queues.borrow().len();
+        let mut pending_by_dst = Vec::with_capacity(worker_count);
+        for _ in 0..worker_count {
+            pending_by_dst.push(Vec::new());
+        }
+
         Self {
             read_half,
             read_buffer: BytesMut::with_capacity(64 * 1024),
@@ -50,6 +61,8 @@ impl ReaderTask {
             },
             conn_token,
             seq: 0,
+            pending_by_dst,
+            next_flush_dst: 0,
         }
     }
 
@@ -57,6 +70,7 @@ impl ReaderTask {
         loop {
             self.read_buffer.reserve(1024);
             if self.read_half.read_buf(&mut self.read_buffer).await? == 0 {
+                self.flush_pending_requests(true);
                 break;
             }
 
@@ -106,10 +120,11 @@ impl ReaderTask {
             }
         }
 
+        self.flush_pending_requests(true);
         true
     }
 
-    fn route_message(&self, frame: RespFrame, seq: u64) {
+    fn route_message(&mut self, frame: RespFrame, seq: u64) {
         let items = match &frame {
             RespFrame::Array(Some(items)) => items,
             other => {
@@ -128,10 +143,10 @@ impl ReaderTask {
             None => return,
         };
 
-        let mut worker_queues = self.core.worker_queues.borrow_mut();
+        let worker_count = self.core.worker_queues.borrow().len();
         let mut hasher = DefaultHasher::new();
         key.hash(&mut hasher);
-        let to_worker = hasher.finish() as usize % worker_queues.len();
+        let to_worker = hasher.finish() as usize % worker_count;
 
         if to_worker == self.core.core_id {
             ROUTING_METRICS.record_keyed_local();
@@ -145,17 +160,6 @@ impl ReaderTask {
             return;
         }
 
-        let destination_worker_queue = match worker_queues.get_mut(to_worker) {
-            Some(queue) => queue,
-            None => {
-                self.send_value_directly(
-                    seq,
-                    RespFrame::Error("internal server error, invalid worker index".into()),
-                );
-                return;
-            }
-        };
-
         #[cfg(debug_assertions)]
         println!(
             "sending message to worker {} with frame: {:?}",
@@ -163,19 +167,13 @@ impl ReaderTask {
         );
 
         ROUTING_METRICS.record_keyed_remote();
-        destination_worker_queue
-            .push_with_notify(WorkerMessage {
-                seq,
-                conn_token: self.conn_token,
-                src_core: self.core.core_id,
-                response_value: frame,
-            })
-            .unwrap_or_else(|err| {
-                eprintln!(
-                    "router push failed (conn {}, seq {}): {:?}",
-                    self.conn_token, seq, err
-                );
-            });
+        let msg = WorkerMessage {
+            seq,
+            conn_token: self.conn_token,
+            src_core: self.core.core_id,
+            response_value: frame,
+        };
+        self.enqueue_remote_message(to_worker, msg);
     }
 
     fn extract_key(&self, seq: u64, items: &[RespFrame]) -> Option<bytes::Bytes> {
@@ -232,5 +230,66 @@ impl ReaderTask {
                     self.conn_token, seq, err
                 );
             });
+    }
+
+    fn enqueue_remote_message(&mut self, dst_core: usize, msg: WorkerMessage) {
+        if let Some(bucket) = self.pending_by_dst.get_mut(dst_core) {
+            bucket.push(msg);
+        } else {
+            eprintln!(
+                "router enqueue failed (conn {}, seq {}): invalid worker index {}",
+                self.conn_token, msg.seq, dst_core
+            );
+            return;
+        }
+
+        if self.pending_by_dst[dst_core].len() >= ROUTE_BATCH_SIZE {
+            self.flush_pending_requests(false);
+        }
+    }
+
+    fn flush_pending_requests(&mut self, force_all: bool) {
+        let total_dsts = self.pending_by_dst.len();
+        if total_dsts == 0 {
+            return;
+        }
+
+        let mut worker_queues = self.core.worker_queues.borrow_mut();
+        let max_flushes = if force_all {
+            total_dsts
+        } else {
+            MAX_BATCH_FLUSHES_PER_TICK.min(total_dsts)
+        };
+
+        let mut flushed_dsts = 0usize;
+        let mut visited = 0usize;
+        while flushed_dsts < max_flushes && visited < total_dsts {
+            let idx = (self.next_flush_dst + visited) % total_dsts;
+            visited += 1;
+
+            if self.pending_by_dst[idx].is_empty() {
+                continue;
+            }
+
+            if !force_all && self.pending_by_dst[idx].len() < ROUTE_BATCH_SIZE {
+                continue;
+            }
+
+            let queue = match worker_queues.get_mut(idx) {
+                Some(queue) => queue,
+                None => continue,
+            };
+
+            let to_send = std::mem::take(&mut self.pending_by_dst[idx]);
+            let unsent = queue.push_batch_with_notify(to_send);
+
+            if !unsent.is_empty() {
+                self.pending_by_dst[idx] = unsent;
+            }
+
+            flushed_dsts += 1;
+        }
+
+        self.next_flush_dst = (self.next_flush_dst + visited) % total_dsts;
     }
 }
