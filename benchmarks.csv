@@ -105,3 +105,39 @@ Timestamp,Git Hash,Note,Test Name,Command,RPS,Latency (p50)
 2026-02-19 16:54:34,5c3af92,multithread_v2,High Concurrency & Throughput (Mixed),SPOP,965250.94,46.783
 2026-02-19 16:54:39,5c3af92,multithread_v2,Heavy Payload Saturation (4KB),SET,481695.56,15.719
 2026-02-19 16:54:39,5c3af92,multithread_v2,Heavy Payload Saturation (4KB),GET,447627.59,23.359
+2026-02-21 14:43:42,d252735,batch2x,Quick Sanity Check,INLINE,100000.00,0.231
+2026-02-21 14:43:42,d252735,batch2x,Quick Sanity Check,MBULK,76923.08,0.631
+2026-02-21 14:43:45,d252735,batch2x,Regular Load (Baseline),SET,185528.77,0.143
+2026-02-21 14:43:45,d252735,batch2x,Regular Load (Baseline),GET,189573.47,0.143
+2026-02-21 14:44:02,d252735,batch2x,High Concurrency & Throughput (Mixed),SET,1246882.88,37.663
+2026-02-21 14:44:02,d252735,batch2x,High Concurrency & Throughput (Mixed),GET,1190476.25,44.287
+2026-02-21 14:44:02,d252735,batch2x,High Concurrency & Throughput (Mixed),LPUSH,1275510.25,47.391
+2026-02-21 14:44:02,d252735,batch2x,High Concurrency & Throughput (Mixed),LPOP,1310616.00,45.887
+2026-02-21 14:44:02,d252735,batch2x,High Concurrency & Throughput (Mixed),SADD,1231527.12,49.375
+2026-02-21 14:44:02,d252735,batch2x,High Concurrency & Throughput (Mixed),SPOP,1012145.75,45.151
+2026-02-21 14:44:06,d252735,batch2x,Heavy Payload Saturation (4KB),SET,498504.47,15.015
+2026-02-21 14:44:06,d252735,batch2x,Heavy Payload Saturation (4KB),GET,475285.16,26.831
+2026-02-21 14:46:41,62e634f,nologging,Quick Sanity Check,INLINE,90909.09,0.487
+2026-02-21 14:46:41,62e634f,nologging,Quick Sanity Check,MBULK,90909.09,0.519
+2026-02-21 14:46:44,62e634f,nologging,Regular Load (Baseline),SET,178412.12,0.143
+2026-02-21 14:46:44,62e634f,nologging,Regular Load (Baseline),GET,188857.41,0.143
+2026-02-21 14:47:00,62e634f,nologging,High Concurrency & Throughput (Mixed),SET,1264222.50,28.351
+2026-02-21 14:47:00,62e634f,nologging,High Concurrency & Throughput (Mixed),GET,1100110.00,43.775
+2026-02-21 14:47:00,62e634f,nologging,High Concurrency & Throughput (Mixed),LPUSH,1319261.12,44.063
+2026-02-21 14:47:00,62e634f,nologging,High Concurrency & Throughput (Mixed),LPOP,1369863.00,44.191
+2026-02-21 14:47:00,62e634f,nologging,High Concurrency & Throughput (Mixed),SADD,1424501.38,43.679
+2026-02-21 14:47:00,62e634f,nologging,High Concurrency & Throughput (Mixed),SPOP,1109877.88,44.127
+2026-02-21 14:47:06,62e634f,nologging,Heavy Payload Saturation (4KB),SET,412201.12,17.391
+2026-02-21 14:47:06,62e634f,nologging,Heavy Payload Saturation (4KB),GET,381970.97,13.311
+2026-02-21 15:07:31,3286f74,pollbudget,Quick Sanity Check,INLINE,142857.14,0.183
+2026-02-21 15:07:31,3286f74,pollbudget,Quick Sanity Check,MBULK,66666.67,0.759
+2026-02-21 15:07:34,3286f74,pollbudget,Regular Load (Baseline),SET,178571.42,0.143
+2026-02-21 15:07:34,3286f74,pollbudget,Regular Load (Baseline),GET,188857.41,0.143
+2026-02-21 15:07:50,3286f74,pollbudget,High Concurrency & Throughput (Mixed),SET,1277139.25,33.375
+2026-02-21 15:07:50,3286f74,pollbudget,High Concurrency & Throughput (Mixed),GET,1275510.25,42.783
+2026-02-21 15:07:50,3286f74,pollbudget,High Concurrency & Throughput (Mixed),LPUSH,1331558.00,45.663
+2026-02-21 15:07:50,3286f74,pollbudget,High Concurrency & Throughput (Mixed),LPOP,1273885.25,47.167
+2026-02-21 15:07:50,3286f74,pollbudget,High Concurrency & Throughput (Mixed),SADD,1331558.00,44.991
+2026-02-21 15:07:50,3286f74,pollbudget,High Concurrency & Throughput (Mixed),SPOP,1084598.75,46.047
+2026-02-21 15:07:55,3286f74,pollbudget,Heavy Payload Saturation (4KB),SET,489236.81,15.399
+2026-02-21 15:07:55,3286f74,pollbudget,Heavy Payload Saturation (4KB),GET,489236.81,25.359
