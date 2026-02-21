@@ -1,9 +1,11 @@
-use std::{cell::RefCell, rc::Rc, sync::Arc};
+use std::{cell::RefCell, env, net, rc::Rc, sync::Arc};
 
 use core_affinity;
+use socket2::{Domain, Protocol, Socket, Type};
 use rtrb::{Consumer, RingBuffer};
 use thread_priority::{set_current_thread_priority, ThreadPriority};
 use tokio::task::LocalSet;
+use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel};
 
 use crate::{
     core::{
@@ -22,6 +24,16 @@ pub type ConsumerMesh<T> = Vec<Vec<Consumer<T>>>;
 pub fn spawn_threads() {
     let core_ids = core_affinity::get_core_ids().expect("failed to get coreIDs with core_affinity");
     let num_cores = core_ids.len();
+    let mut conn_rxs: Vec<UnboundedReceiver<net::TcpStream>> = Vec::with_capacity(num_cores);
+    let mut conn_txs: Vec<UnboundedSender<net::TcpStream>> = Vec::with_capacity(num_cores);
+
+    for _ in 0..num_cores {
+        let (tx, rx) = unbounded_channel();
+        conn_txs.push(tx);
+        conn_rxs.push(rx);
+    }
+
+    spawn_acceptor_thread(conn_txs);
 
     let mut worker_doorbells = create_doorbells(num_cores);
     let mut io_doorbells = create_doorbells(num_cores);
@@ -42,6 +54,7 @@ pub fn spawn_threads() {
 
         let worker_doorbell = worker_doorbells.remove(0);
         let io_doorbell = io_doorbells.remove(0);
+        let conn_rx = conn_rxs.remove(0);
 
         let handle = std::thread::spawn(move || {
             if let Err(err) = set_current_thread_priority(ThreadPriority::Max) {
@@ -88,6 +101,7 @@ pub fn spawn_threads() {
                 io_doorbell,
                 io_shard_executor,
                 io_reply_dispatcher,
+                conn_rx,
             ));
             //
             rt.block_on(local);
@@ -98,6 +112,52 @@ pub fn spawn_threads() {
     for h in handles {
         h.join().expect("failed while joining on handles");
     }
+}
+
+fn spawn_acceptor_thread(conn_txs: Vec<UnboundedSender<net::TcpStream>>) {
+    std::thread::spawn(move || {
+        let args: Vec<String> = env::args().collect();
+        let port = args
+            .get(1)
+            .and_then(|s| s.parse::<u16>().ok())
+            .unwrap_or(6379);
+        let addr = format!("127.0.0.1:{}", port);
+        let std_addr: net::SocketAddr = addr
+            .parse()
+            .expect("failure while parsing address for socket");
+        let socket2_addr: socket2::SockAddr = std_addr.into();
+
+        let socket = Socket::new(Domain::IPV4, Type::STREAM, Some(Protocol::TCP))
+            .expect("failed to create acceptor socket");
+        socket
+            .set_reuse_address(true)
+            .expect("failed to set reuse address on acceptor socket");
+        socket
+            .bind(&socket2_addr)
+            .expect("failed to bind acceptor socket");
+        socket.listen(1024).expect("failed to listen on acceptor socket");
+
+        let listener: net::TcpListener = socket.into();
+        println!("Listening on port {port}");
+
+        let mut rr_idx = 0usize;
+        loop {
+            let (stream, _) = match listener.accept() {
+                Ok(conn) => conn,
+                Err(e) => {
+                    eprintln!("acceptor accept error: {e}");
+                    continue;
+                }
+            };
+
+            let dst = rr_idx % conn_txs.len();
+            rr_idx = rr_idx.wrapping_add(1);
+
+            if let Err(_send_err) = conn_txs[dst].send(stream) {
+                eprintln!("acceptor failed to route connection to io core {dst}");
+            }
+        }
+    });
 }
 
 fn create_doorbells(num_cores: usize) -> Vec<Arc<TaskNotifier>> {

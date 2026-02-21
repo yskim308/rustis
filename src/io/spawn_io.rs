@@ -1,14 +1,13 @@
 use std::{
     cell::RefCell,
-    env,
-    net::{self},
+    net,
     rc::Rc,
     sync::Arc,
 };
 
 use rtrb::Consumer;
 use slab::Slab;
-use socket2::{Domain, Protocol, Socket, Type};
+use tokio::sync::mpsc::UnboundedReceiver;
 use crate::{
     core::{
         reply_dispatcher::ReplyDispatcher,
@@ -28,43 +27,8 @@ pub async fn spawn_io(
     io_doorbell: Arc<TaskNotifier>,
     shard_executor: Rc<RefCell<ShardExecutor>>,
     reply_dispatcher: Rc<RefCell<ReplyDispatcher>>,
+    mut conn_rx: UnboundedReceiver<net::TcpStream>,
 ) -> tokio::io::Result<()> {
-    let args: Vec<String> = env::args().collect();
-    let port = args
-        .get(1)
-        .and_then(|s| s.parse::<u16>().ok())
-        .unwrap_or(6379);
-    let addr = format!("127.0.0.1:{}", port);
-    let std_addr: net::SocketAddr = addr
-        .parse()
-        .expect("failure while parsing address for socket");
-    let socket2_addr: socket2::SockAddr = std_addr.into();
-
-    // set up socket (note: reuse port only works on unix machines)
-    let socket = Socket::new(Domain::IPV4, Type::STREAM, Some(Protocol::TCP))
-        .expect("failed to create socket2 socket");
-    socket
-        .set_reuse_address(true)
-        .expect("failed to set reuse socket2 address");
-    socket
-        .set_reuse_port(true)
-        .expect("failed to set reuse port");
-    socket
-        .bind(&socket2_addr)
-        .expect("failed to bind to socket2 address");
-    socket
-        .listen(1024)
-        .expect("failed to listen and set 1024 backlog");
-
-    let std_listener: net::TcpListener = socket.into();
-    std_listener
-        .set_nonblocking(true)
-        .expect("failed while setting TCP litener to non blocking");
-    let listener = tokio::net::TcpListener::from_std(std_listener)
-        .expect("failed to create async listener from std listener");
-
-    println!("Listening on port {port}");
-
     // create the registry of connections for this thread
     let connections = Rc::new(RefCell::new(Slab::<ConnectionState>::with_capacity(8192)));
 
@@ -76,12 +40,22 @@ pub async fn spawn_io(
         io_doorbell,
     ));
 
-    // connection accepting loop
+    // connection receive loop (accept happens in dedicated acceptor thread)
     loop {
-        let (stream, _) = match listener.accept().await {
-            Ok(conn) => conn,
+        let std_stream = match conn_rx.recv().await {
+            Some(stream) => stream,
+            None => return Ok(()),
+        };
+
+        if let Err(e) = std_stream.set_nonblocking(true) {
+            eprint!("error on core {} (set_nonblocking): {:?}", core_id, e);
+            continue;
+        }
+
+        let stream = match tokio::net::TcpStream::from_std(std_stream) {
+            Ok(stream) => stream,
             Err(e) => {
-                eprint!("error on core {}: {:?}", core_id, e);
+                eprint!("error on core {} (from_std): {:?}", core_id, e);
                 continue;
             }
         };
