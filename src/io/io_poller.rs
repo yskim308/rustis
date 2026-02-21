@@ -28,15 +28,12 @@ impl Future for IOInboxPoller {
         mut self: std::pin::Pin<&mut Self>,
         cx: &mut std::task::Context<'_>,
     ) -> std::task::Poll<Self::Output> {
-        let mut did_work = false;
-
         for i in 0..self.inboxes.len() {
             let mut quota = POLL_DRAIN_QUOTA;
 
             while quota > 0 {
                 match self.inboxes[i].pop() {
                     Ok(msg) => {
-                        did_work = true;
                         Self::handle_message(msg, &self.connections);
                     }
                     Err(_) => break,
@@ -45,13 +42,10 @@ impl Future for IOInboxPoller {
             }
         }
 
-        let has_pending_writes = Self::flush_with_budget(&self.connections, IO_WRITE_SYSCALL_BUDGET);
+        let has_pending_writes =
+            Self::flush_with_budget(&self.connections, IO_WRITE_SYSCALL_BUDGET);
         if has_pending_writes {
             cx.waker().wake_by_ref();
-            return Poll::Pending;
-        }
-
-        if did_work {
             return Poll::Pending;
         }
 
