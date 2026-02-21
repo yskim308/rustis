@@ -25,4 +25,32 @@ impl<T> NotifiedProducer<T> {
 
         Ok(())
     }
+
+    pub fn push_batch_with_notify(&mut self, items: Vec<T>) -> Vec<T> {
+        let mut pushed_any = false;
+        let mut iter = items.into_iter();
+
+        while let Some(item) = iter.next() {
+            match self.producer.push(item) {
+                Ok(()) => {
+                    pushed_any = true;
+                }
+                Err(PushError::Full(item)) => {
+                    let mut unsent = Vec::new();
+                    unsent.push(item);
+                    unsent.extend(iter);
+                    if pushed_any {
+                        self.consumer_notifier.wake_if_sleeping();
+                    }
+                    return unsent;
+                }
+            }
+        }
+
+        if pushed_any {
+            self.consumer_notifier.wake_if_sleeping();
+        }
+
+        Vec::new()
+    }
 }
