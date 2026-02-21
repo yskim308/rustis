@@ -8,7 +8,7 @@ use std::{
 use rtrb::Consumer;
 
 use crate::{
-    config::{BATCH_SIZE, MAX_BATCH_FLUSHES_PER_TICK},
+    config::{BATCH_SIZE, MAX_BATCH_FLUSHES_PER_TICK, POLL_DRAIN_QUOTA},
     core::{reply_dispatcher::ReplyDispatcher, shard_executor::ShardExecutor},
     message::ResponseMessage,
     message::WorkerMessage,
@@ -35,7 +35,7 @@ impl Future for WorkerTask {
         let mut did_work = false;
 
         for i in 0..self.inboxes.len() {
-            let mut quota = 32;
+            let mut quota = POLL_DRAIN_QUOTA;
 
             while quota > 0 {
                 match self.inboxes[i].pop() {
@@ -51,13 +51,11 @@ impl Future for WorkerTask {
 
         self.flush_pending_responses(false);
 
-        // if work is processed, we're hot, yield but do NOT sleep (yield to runtime)
+        // If we did work, force-flush any partial response batches so low-volume
+        // traffic (e.g. single PING) is not stranded waiting for batch fill.
         if did_work {
-            cx.waker().wake_by_ref();
-            return Poll::Pending;
+            self.flush_pending_responses(true);
         }
-
-        self.flush_pending_responses(true);
 
         // go to sleep, only wake by manual wakeup
         self.doorbell.is_sleeping.store(true, Ordering::Release);

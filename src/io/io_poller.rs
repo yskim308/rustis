@@ -7,6 +7,7 @@ use bytes::Buf;
 use rtrb::Consumer;
 
 use crate::{
+    config::POLL_DRAIN_QUOTA,
     io::connection_state::{ConnectionState, ConnectionStore},
     message::ResponseMessage,
     polling::task_notifier::TaskNotifier,
@@ -25,27 +26,18 @@ impl Future for IOInboxPoller {
         mut self: std::pin::Pin<&mut Self>,
         cx: &mut std::task::Context<'_>,
     ) -> std::task::Poll<Self::Output> {
-        let mut did_work = false;
-
         for i in 0..self.inboxes.len() {
-            let mut quota = 32;
+            let mut quota = POLL_DRAIN_QUOTA;
 
             while quota > 0 {
                 match self.inboxes[i].pop() {
                     Ok(msg) => {
-                        did_work = true;
                         Self::handle_message(msg, &self.connections);
                     }
                     Err(_) => break,
                 }
                 quota -= 1;
             }
-        }
-
-        if did_work {
-            // Keep polling to flush any buffered writes.
-            cx.waker().wake_by_ref();
-            return Poll::Pending;
         }
 
         // No new messages, but we may still have buffered writes to flush.
