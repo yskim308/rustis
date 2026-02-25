@@ -3,9 +3,7 @@
 A high-performance, in-memory key-value database that **achieves 3.7M ops/sec** - outperforming Redis by up to 236% on high-concurrency workloads.
 
 > [!NOTE]
-> Currently, the server is multi-threaded with a fan-in / fan-out model. It is not as performant as the single-threaded version (check branch `single_thread`) due to sync overhead.
-
-This is an ongoing project, and the plan is to adopt DragonflyDB's shared-nothing architecture. 
+> For a detailed description of the single-threaded architecture, please look at branch `single-thread`
 
 ## Why Rustis?
 Redis is single-threaded by design. Modern servers have 64+ cores going unused. Rustis explores whether a multi-threaded, shared-nothing architecture can unlock that potential while maintaining Redis simplicity.
